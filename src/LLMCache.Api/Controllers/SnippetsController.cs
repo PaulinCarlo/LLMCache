@@ -22,7 +22,7 @@ public class SnippetsController(ISnippetService snippetService, ILogger<Snippets
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        var lineCount = request.Code.Split('\n').Length;
+        var lineCount = request.Code.Split('\n', StringSplitOptions.None).Length;
         if (lineCount < 1 || lineCount > 1000)
         {
             ModelState.AddModelError("Code", $"Code must be between 1 and 1000 lines (got {lineCount}).");

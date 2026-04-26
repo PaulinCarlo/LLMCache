@@ -16,6 +16,8 @@ public class DeltaService(
     private readonly string _apiKey = config["Delta:ApiKey"] ?? string.Empty;
     private readonly string _model = config["Delta:Model"] ?? "gemini-1.5-flash";
     private readonly string _provider = config["Delta:Provider"] ?? "google";
+    // Scores >= 60 indicate the cached snippet covers enough of the new prompt to be a "hit";
+    // lower scores are "partial" matches that need more adaptation.
     private const int SimilarityThreshold = 60;
 
     public async Task<DeltaResponse> ComputeDeltaAsync(DeltaRequest request, CancellationToken ct = default)
