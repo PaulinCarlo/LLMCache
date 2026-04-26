@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PromptCache Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <span class="nav-logo">⚡</span>
+      <span>PromptCache</span>
+    </div>
+    <div class="nav-stats" id="nav-stats">Loading…</div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header">
+      <h1>Your Snippet Library</h1>
+      <button class="btn btn-primary" onclick="openModal()">+ Add Snippet</button>
+    </div>
+
+    <div class="search-bar">
+      <input type="text" id="search-input" placeholder="Search snippets by prompt, language, tag…" oninput="handleSearch()" />
+      <button class="btn" onclick="handleSearch()">Search</button>
+    </div>
+
+    <div class="filter-bar">
+      <button class="filter-btn active" data-lang="" onclick="setFilter(this, '')">All</button>
+      <button class="filter-btn" data-lang="TypeScript" onclick="setFilter(this, 'TypeScript')">TypeScript</button>
+      <button class="filter-btn" data-lang="Python" onclick="setFilter(this, 'Python')">Python</button>
+      <button class="filter-btn" data-lang="CSS" onclick="setFilter(this, 'CSS')">CSS</button>
+      <button class="filter-btn" data-lang="JavaScript" onclick="setFilter(this, 'JavaScript')">JavaScript</button>
+    </div>
+
+    <div class="snippets-grid" id="snippets-grid">
+      <div class="loading">Loading snippets…</div>
+    </div>
+  </main>
+
+  <!-- Add/Edit Modal -->
+  <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Add Snippet</h2>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <form class="modal-form" onsubmit="saveSnippet(event)">
+        <div class="form-group">
+          <label>Prompt <span class="required">*</span></label>
+          <textarea id="f-prompt" placeholder="What did you ask the AI?" rows="3" required minlength="10" maxlength="2000"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Code <span class="required">*</span></label>
+          <textarea id="f-code" placeholder="The code response / solution" rows="8" required class="code-textarea"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Intent</label>
+          <input type="text" id="f-intent" placeholder="Why did you need this?" maxlength="1000">
+        </div>
+        <div class="form-group">
+          <label>Constraints</label>
+          <input type="text" id="f-constraints" placeholder="Any requirements or limitations?" maxlength="2000">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Language</label>
+            <input type="text" id="f-language" placeholder="e.g. TypeScript">
+          </div>
+          <div class="form-group">
+            <label>Framework</label>
+            <input type="text" id="f-framework" placeholder="e.g. React 18">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Runtime Version</label>
+            <input type="text" id="f-runtime" placeholder="e.g. Node 20, .NET 10">
+          </div>
+          <div class="form-group">
+            <label>Build Tool</label>
+            <input type="text" id="f-buildtool" placeholder="e.g. vite, webpack">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Package Manager</label>
+            <input type="text" id="f-pkgmgr" placeholder="npm, pnpm, yarn, pip">
+          </div>
+          <div class="form-group">
+            <label>Target Platform</label>
+            <input type="text" id="f-platform" placeholder="browser, node, serverless">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="f-strict"> Strict Mode (TypeScript strict, ESLint strict, etc.)
+          </label>
+        </div>
+        <div class="form-group">
+          <label>Tags</label>
+          <input type="text" id="f-tags" placeholder="Comma-separated: react, hooks, state">
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="f-public"> Make snippet public
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="save-btn">Save Snippet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Detail / Delta Modal -->
+  <div class="modal-overlay" id="detail-overlay" onclick="closeDetail(event)">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="detail-title">Snippet Detail</h2>
+        <button class="modal-close" onclick="closeDetail()">✕</button>
+      </div>
+      <div id="detail-body" class="detail-body"></div>
+      <div class="modal-actions">
+        <button class="btn" id="delta-btn" onclick="runDelta()">🔍 Analyze vs New Prompt</button>
+        <button class="btn btn-danger" id="delete-btn" onclick="deleteSnippet()">Delete</button>
+        <button class="btn" onclick="closeDetail()">Close</button>
+      </div>
+      <div id="delta-section" style="display:none" class="delta-section">
+        <h3>Delta Analysis</h3>
+        <textarea id="new-prompt-input" placeholder="Enter your new prompt here…" rows="3"></textarea>
+        <button class="btn btn-primary" onclick="submitDelta()">Compute Delta</button>
+        <div id="delta-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
