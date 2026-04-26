@@ -1,0 +1,16 @@
+# .NET build artifacts
+src/**/bin/
+src/**/obj/
+
+# Node / npm
+extension/node_modules/
+extension/.plasmo/
+extension/build/
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
