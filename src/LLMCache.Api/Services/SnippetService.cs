@@ -7,8 +7,9 @@ using Pgvector.EntityFrameworkCore;
 
 namespace LLMCache.Api.Services;
 
-public class SnippetService(AppDbContext db, IEmbeddingService embeddingService, ILogger<SnippetService> logger) : ISnippetService
+public class SnippetService(AppDbContext db, IEmbeddingService embeddingService, IConfiguration config, ILogger<SnippetService> logger) : ISnippetService
 {
+    private readonly string _embeddingModel = config["Embeddings:Model"] ?? "text-embedding-3-small";
     public async Task<SnippetResponse> CreateSnippetAsync(CreateSnippetRequest request, Guid userId, CancellationToken ct = default)
     {
         var lineCount = request.Code.Split('\n', StringSplitOptions.None).Length;
@@ -50,7 +51,7 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
             {
                 SnippetId = snippet.Id,
                 EmbeddingVector = new Vector(vector),
-                ModelName = "text-embedding-3-small",
+                ModelName = _embeddingModel,
                 Dimensions = vector.Length
             };
             db.SnippetEmbeddings.Add(embedding);

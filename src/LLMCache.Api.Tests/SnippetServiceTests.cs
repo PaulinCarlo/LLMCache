@@ -2,6 +2,7 @@ using LLMCache.Api.Data;
 using LLMCache.Api.DTOs;
 using LLMCache.Api.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -23,8 +24,10 @@ public class SnippetServiceTests
         _embeddingMock = new Mock<IEmbeddingService>();
         _embeddingMock.Setup(e => e.GenerateEmbeddingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                       .ReturnsAsync(new float[1536]);
+        var configMock = new Mock<IConfiguration>();
+        configMock.Setup(c => c["Embeddings:Model"]).Returns((string?)"text-embedding-3-small");
         var logger = Mock.Of<ILogger<SnippetService>>();
-        _service = new SnippetService(_db, _embeddingMock.Object, logger);
+        _service = new SnippetService(_db, _embeddingMock.Object, configMock.Object, logger);
     }
 
     [Fact]
@@ -190,8 +193,14 @@ public class SnippetServiceTests
         var request = new CreateSnippetRequest
         {
             Prompt = "short",
-            Code = ""
+            Code = "some code"
         };
-        Assert.Equal("short", request.Prompt);
+
+        var validationContext = new System.ComponentModel.DataAnnotations.ValidationContext(request);
+        var validationResults = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        System.ComponentModel.DataAnnotations.Validator.TryValidateObject(request, validationContext, validationResults, validateAllProperties: true);
+
+        // Prompt "short" is 5 chars, below MinLength of 10 - should fail validation
+        Assert.Contains(validationResults, r => r.MemberNames.Contains("Prompt"));
     }
 }
