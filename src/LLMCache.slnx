@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="LLMCache.Api.Tests/LLMCache.Api.Tests.csproj" />
+  <Project Path="LLMCache.Api/LLMCache.Api.csproj" />
+</Solution>
