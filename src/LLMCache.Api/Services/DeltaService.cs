@@ -158,10 +158,7 @@ public class DeltaService(
 
     private async Task<string> CallOpenAiAsync(string systemPrompt, string userPrompt, CancellationToken ct)
     {
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
-
-        var request = new
+        var requestBody = new
         {
             model = _model,
             messages = new[]
@@ -172,7 +169,12 @@ public class DeltaService(
             response_format = new { type = "json_object" }
         };
 
-        var response = await _httpClient.PostAsJsonAsync("https://api.openai.com/v1/chat/completions", request, ct);
+        using var message = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
+        message.Headers.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+        message.Content = JsonContent.Create(requestBody);
+
+        var response = await _httpClient.SendAsync(message, ct);
         response.EnsureSuccessStatusCode();
 
         using var doc = await response.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: ct);

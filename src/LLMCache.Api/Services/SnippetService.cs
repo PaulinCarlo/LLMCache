@@ -102,6 +102,7 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
         var results = await db.SnippetEmbeddings
             .Include(e => e.Snippet)
             .OrderBy(e => e.EmbeddingVector.CosineDistance(pgVector))
+            // Fetch topK*2 candidates so that enough results remain after filtering by minSimilarity
             .Take(topK * 2)
             .Select(e => new
             {

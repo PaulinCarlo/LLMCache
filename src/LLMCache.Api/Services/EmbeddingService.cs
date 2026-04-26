@@ -36,12 +36,13 @@ public class EmbeddingService(HttpClient httpClient, IConfiguration config, ILog
 
     private async Task<float[]> GenerateOpenAiEmbeddingAsync(string text, CancellationToken ct)
     {
-        httpClient.DefaultRequestHeaders.Authorization =
+        var requestBody = new { model = _model, input = text };
+        using var message = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/embeddings");
+        message.Headers.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+        message.Content = JsonContent.Create(requestBody);
 
-        var request = new { model = _model, input = text };
-        var response = await httpClient.PostAsJsonAsync(
-            "https://api.openai.com/v1/embeddings", request, ct);
+        var response = await httpClient.SendAsync(message, ct);
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<OpenAiEmbeddingResponse>(cancellationToken: ct);
