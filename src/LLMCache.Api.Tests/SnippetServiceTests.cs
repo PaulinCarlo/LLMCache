@@ -25,7 +25,7 @@ public class SnippetServiceTests
         _embeddingMock.Setup(e => e.GenerateEmbeddingAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                       .ReturnsAsync(new float[1536]);
         var configMock = new Mock<IConfiguration>();
-        configMock.Setup(c => c["Embeddings:Model"]).Returns((string?)"text-embedding-3-small");
+        configMock.Setup(c => c["Embeddings:Model"]).Returns("text-embedding-3-small");
         var logger = Mock.Of<ILogger<SnippetService>>();
         _service = new SnippetService(_db, _embeddingMock.Object, configMock.Object, logger);
     }
