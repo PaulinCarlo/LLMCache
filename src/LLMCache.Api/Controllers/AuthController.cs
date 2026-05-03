@@ -62,7 +62,7 @@ public class AuthController(
         // return Ok(new { message = "Registration successful. Please confirm your email." });
         // ──────────────────────────────────────────────────────
 
-        logger.LogInformation("New user registered: {Email}", user.Email);
+        logger.LogInformation("New user registered: {Email}", SanitizeForLog(user.Email));
         var tokenResponse = await BuildTokenAsync(user);
         return CreatedAtAction(nameof(Register), tokenResponse);
     }
@@ -95,7 +95,7 @@ public class AuthController(
             return Unauthorized(new { message = "Invalid credentials." });
         }
 
-        logger.LogInformation("User logged in: {Email}", user.Email);
+        logger.LogInformation("User logged in: {Email}", SanitizeForLog(user.Email));
         return Ok(await BuildTokenAsync(user));
     }
 
@@ -165,7 +165,7 @@ public class AuthController(
             await userManager.AddLoginAsync(user, info);
         }
 
-        logger.LogInformation("User logged in via {Provider}: {Email}", info.LoginProvider, user.Email);
+        logger.LogInformation("User logged in via {Provider}: {Email}", info.LoginProvider, SanitizeForLog(user.Email));
         var token = await BuildTokenAsync(user);
         var redirectTarget = BuildFrontendUrl(returnUrl, accessToken: token.AccessToken);
         return Redirect(redirectTarget);
@@ -211,10 +211,34 @@ public class AuthController(
             DisplayName: user.DisplayName);
     }
 
-    private string BuildFrontendUrl(string? returnUrl, string? accessToken = null, string? error = null)
+    /// <summary>
+    /// Validates that <paramref name="returnUrl"/> belongs to a configured allowed origin.
+    /// Returns the frontend base URL if validation fails.
+    /// </summary>
+    private string ValidateReturnUrl(string? returnUrl)
     {
         var frontendBase = configuration["FrontendUrl"] ?? "http://localhost:3000";
-        var target = string.IsNullOrEmpty(returnUrl) ? $"{frontendBase}/login.html" : returnUrl;
+
+        if (string.IsNullOrEmpty(returnUrl))
+            return $"{frontendBase}/login.html";
+
+        if (!Uri.TryCreate(returnUrl, UriKind.Absolute, out var uri))
+            return $"{frontendBase}/login.html";
+
+        var returnOrigin = $"{uri.Scheme}://{uri.Authority}";
+        var allowedOrigins = configuration.GetSection("AllowedOrigins").Get<string[]>()
+                             ?? ["http://localhost:3000", "http://localhost:5173"];
+
+        if (allowedOrigins.Any(o => o.Equals(returnOrigin, StringComparison.OrdinalIgnoreCase)))
+            return returnUrl;
+
+        logger.LogWarning("Rejected unrecognised returnUrl origin: {Origin}", returnOrigin);
+        return $"{frontendBase}/login.html";
+    }
+
+    private string BuildFrontendUrl(string? returnUrl, string? accessToken = null, string? error = null)
+    {
+        var target = ValidateReturnUrl(returnUrl);
 
         if (!string.IsNullOrEmpty(accessToken))
             target += $"?access_token={Uri.EscapeDataString(accessToken)}";
@@ -223,4 +247,8 @@ public class AuthController(
 
         return target;
     }
+
+    /// <summary>Strips newline characters to prevent log-injection attacks.</summary>
+    private static string SanitizeForLog(string? value) =>
+        (value ?? string.Empty).Replace("\r", "").Replace("\n", "");
 }
