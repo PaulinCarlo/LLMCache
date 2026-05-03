@@ -2,6 +2,7 @@ import cssText from "data-text:../styles/widget.css"
 import type { PlasmoCSConfig } from "plasmo"
 import { useEffect, useRef, useState } from "react"
 import { sendToBackground } from "@plasmohq/messaging"
+import { getAdapter, type ChatAdapter } from "./adapters"
 
 export const config: PlasmoCSConfig = {
   matches: [
@@ -10,7 +11,8 @@ export const config: PlasmoCSConfig = {
     "https://claude.ai/*",
     "https://gemini.google.com/*",
     "https://bard.google.com/*",
-    "https://www.bing.com/chat*"
+    "https://www.bing.com/chat*",
+    "https://github.com/*"
   ],
   all_frames: false
 }
@@ -21,7 +23,8 @@ export const getStyle = () => {
   return style
 }
 
-const SELECTORS = [
+// Fallback generic selectors used when no site-specific adapter is available
+const FALLBACK_SELECTORS = [
   "#prompt-textarea",
   "[contenteditable='true']",
   "textarea[placeholder]",
@@ -52,10 +55,23 @@ interface DeltaResult {
   whatRemains: string[]
 }
 
-function CacheWidget({ results, onClose, onDelta }: {
+async function searchCache(prompt: string) {
+  return sendToBackground<any, any>({
+    name: "index",
+    body: { type: "SEARCH", payload: { prompt } }
+  })
+}
+
+function CacheWidget({
+  results,
+  onClose,
+  onDelta,
+  onUse
+}: {
   results: SearchResult[]
   onClose: () => void
   onDelta: (result: SearchResult) => void
+  onUse: (result: SearchResult) => void
 }) {
   const best = results[0]
   const pct = Math.round(best.similarityScore * 100)
@@ -78,10 +94,16 @@ function CacheWidget({ results, onClose, onDelta }: {
           )}
           <span className="pc-badge pc-lines">{best.snippet.lineCount} lines</span>
         </div>
-        <pre className="pc-code">{best.snippet.code.slice(0, 300)}{best.snippet.code.length > 300 ? "\n..." : ""}</pre>
+        <pre className="pc-code">
+          {best.snippet.code.slice(0, 300)}
+          {best.snippet.code.length > 300 ? "\n..." : ""}
+        </pre>
       </div>
       <div className="pc-actions">
-        <button className="pc-btn pc-btn-primary" onClick={() => onDelta(best)}>
+        <button className="pc-btn pc-btn-primary" onClick={() => onUse(best)}>
+          Use Response
+        </button>
+        <button className="pc-btn" onClick={() => onDelta(best)}>
           Analyze Diff
         </button>
         <button className="pc-btn" onClick={onClose}>
@@ -93,7 +115,13 @@ function CacheWidget({ results, onClose, onDelta }: {
 }
 
 function DeltaWidget({ delta, onClose }: { delta: DeltaResult; onClose: () => void }) {
-  const statusColor = delta.cacheStatus === "hit" ? "#22c55e" : delta.cacheStatus === "partial" ? "#f59e0b" : "#ef4444"
+  const statusColor =
+    delta.cacheStatus === "hit"
+      ? "#22c55e"
+      : delta.cacheStatus === "partial"
+        ? "#f59e0b"
+        : "#ef4444"
+
   return (
     <div className="pc-widget pc-delta" role="dialog" aria-label="Delta analysis">
       <div className="pc-header">
@@ -137,44 +165,140 @@ function PromptCacheOverlay() {
   const [results, setResults] = useState<SearchResult[] | null>(null)
   const [delta, setDelta] = useState<DeltaResult | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const adapterRef = useRef<ChatAdapter | null>(null)
+  const autoCheckRef = useRef(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastPromptRef = useRef("")
 
+  // Keep autoCheck flag in sync with storage
   useEffect(() => {
-    let observer: MutationObserver | null = null
+    chrome.storage.local.get(["autoCheck"], (r) => {
+      autoCheckRef.current = (r.autoCheck as boolean) ?? false
+    })
+    const onChange = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if ("autoCheck" in changes) {
+        autoCheckRef.current = (changes.autoCheck.newValue as boolean) ?? false
+      }
+    }
+    chrome.storage.onChanged.addListener(onChange)
+    return () => chrome.storage.onChanged.removeListener(onChange)
+  }, [])
 
-    const attachToInput = (input: Element) => {
-      const handleInput = () => {
-        const text = (input as HTMLInputElement | HTMLTextAreaElement).value ||
-          (input as HTMLElement).innerText || ""
-        if (text.length < 20 || text === lastPromptRef.current) return
-        lastPromptRef.current = text
-        if (debounceRef.current) clearTimeout(debounceRef.current)
-        debounceRef.current = setTimeout(async () => {
+  // Set up adapter, send interceptor, and fallback input listener
+  useEffect(() => {
+    let sendCleanup: (() => void) | null = null
+
+    const setup = () => {
+      const adapter = getAdapter()
+      adapterRef.current = adapter
+
+      if (adapter) {
+        // Intercept send button via the site-specific adapter
+        sendCleanup?.()
+        sendCleanup = adapter.interceptSend(async (prompt) => {
+          if (!autoCheckRef.current) return true // pass-through when disabled
           setIsLoading(true)
-          const resp = await sendToBackground({ name: "index", body: { type: "SEARCH", payload: { prompt: text } } })
+          const resp = await searchCache(prompt)
           setIsLoading(false)
-          if (resp?.success && resp.results?.length > 0 && resp.results[0].similarityScore >= 0.65) {
+          if (
+            resp?.success &&
+            resp.results?.length > 0 &&
+            resp.results[0].similarityScore >= 0.65
+          ) {
             setResults(resp.results)
             setDelta(null)
+            return false // block send – show cached result
           }
-        }, 800)
+          return true // no hit – let send proceed
+        })
+      } else {
+        // No adapter: attach a generic input listener for real-time suggestions
+        const attachInput = (input: Element) => {
+          const handleInput = () => {
+            const text =
+              (input as HTMLInputElement).value ||
+              (input as HTMLElement).innerText ||
+              ""
+            if (text.length < 20 || text === lastPromptRef.current) return
+            lastPromptRef.current = text
+            if (debounceRef.current) clearTimeout(debounceRef.current)
+            debounceRef.current = setTimeout(async () => {
+              setIsLoading(true)
+              const resp = await searchCache(text)
+              setIsLoading(false)
+              if (
+                resp?.success &&
+                resp.results?.length > 0 &&
+                resp.results[0].similarityScore >= 0.65
+              ) {
+                setResults(resp.results)
+                setDelta(null)
+              }
+            }, 800)
+          }
+          input.addEventListener("input", handleInput)
+          input.addEventListener("keyup", handleInput)
+        }
+
+        for (const sel of FALLBACK_SELECTORS) {
+          const el = document.querySelector(sel)
+          if (el) {
+            attachInput(el)
+            break
+          }
+        }
       }
-      input.addEventListener("input", handleInput)
-      input.addEventListener("keyup", handleInput)
     }
 
-    const tryAttach = () => {
-      for (const sel of SELECTORS) {
-        const el = document.querySelector(sel)
-        if (el) { attachToInput(el); return }
-      }
-    }
+    setup()
 
-    tryAttach()
-    observer = new MutationObserver(tryAttach)
+    const observer = new MutationObserver(() => {
+      if (!adapterRef.current) setup()
+    })
     observer.observe(document.body, { childList: true, subtree: true })
-    return () => observer?.disconnect()
+
+    return () => {
+      observer.disconnect()
+      sendCleanup?.()
+    }
+  }, [])
+
+  // Handle CHECK_PROMPT messages sent from the popup
+  useEffect(() => {
+    const onMessage = (
+      message: any,
+      _sender: chrome.runtime.MessageSender,
+      sendResponse: (r: any) => void
+    ) => {
+      if (message.type !== "CHECK_PROMPT") return false
+
+      const adapter = adapterRef.current
+      const prompt = adapter ? adapter.getPromptText() : ""
+      if (!prompt.trim()) {
+        sendResponse({ success: false, error: "No prompt found" })
+        return false
+      }
+
+      setIsLoading(true)
+      searchCache(prompt).then((resp) => {
+        setIsLoading(false)
+        if (
+          resp?.success &&
+          resp.results?.length > 0 &&
+          resp.results[0].similarityScore >= 0.65
+        ) {
+          setResults(resp.results)
+          setDelta(null)
+          sendResponse({ success: true, hit: true })
+        } else {
+          sendResponse({ success: true, hit: false })
+        }
+      })
+      return true // async response
+    }
+
+    chrome.runtime.onMessage.addListener(onMessage)
+    return () => chrome.runtime.onMessage.removeListener(onMessage)
   }, [])
 
   const handleDelta = async (result: SearchResult) => {
@@ -190,6 +314,12 @@ function PromptCacheOverlay() {
     }
   }
 
+  // Paste the cached code response back into the chat input
+  const handleUse = (result: SearchResult) => {
+    adapterRef.current?.setPromptText(result.snippet.code)
+    setResults(null)
+  }
+
   if (!results && !delta && !isLoading) return null
 
   return (
@@ -200,7 +330,12 @@ function PromptCacheOverlay() {
         </div>
       )}
       {results && !isLoading && (
-        <CacheWidget results={results} onClose={() => setResults(null)} onDelta={handleDelta} />
+        <CacheWidget
+          results={results}
+          onClose={() => setResults(null)}
+          onDelta={handleDelta}
+          onUse={handleUse}
+        />
       )}
       {delta && !isLoading && (
         <DeltaWidget delta={delta} onClose={() => setDelta(null)} />
