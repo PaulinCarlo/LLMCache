@@ -214,6 +214,7 @@ public class AuthController(
     /// <summary>
     /// Validates that <paramref name="returnUrl"/> belongs to a configured allowed origin.
     /// Returns the frontend base URL if validation fails.
+    /// Wildcard origins (e.g. chrome-extension://*) are excluded from redirect validation.
     /// </summary>
     private string ValidateReturnUrl(string? returnUrl)
     {
@@ -226,8 +227,13 @@ public class AuthController(
             return $"{frontendBase}/login.html";
 
         var returnOrigin = $"{uri.Scheme}://{uri.Authority}";
-        var allowedOrigins = configuration.GetSection("AllowedOrigins").Get<string[]>()
-                             ?? ["http://localhost:3000", "http://localhost:5173"];
+
+        // Exclude wildcard patterns (e.g. "chrome-extension://*") — they are valid for CORS
+        // headers but cannot be used for safe redirect matching.
+        var allowedOrigins = (configuration.GetSection("AllowedOrigins").Get<string[]>()
+                              ?? ["http://localhost:3000", "http://localhost:5173"])
+            .Where(o => !o.Contains('*'))
+            .ToArray();
 
         if (allowedOrigins.Any(o => o.Equals(returnOrigin, StringComparison.OrdinalIgnoreCase)))
             return returnUrl;
