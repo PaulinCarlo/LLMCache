@@ -62,6 +62,15 @@ async function searchCache(prompt: string) {
   })
 }
 
+const CONNECTION_FAILED = "connection failed"
+
+async function searchCacheWithTimeout(prompt: string, timeoutMs = 5000) {
+  const timeout = new Promise<{ success: false; error: string }>((resolve) =>
+    setTimeout(() => resolve({ success: false, error: CONNECTION_FAILED }), timeoutMs)
+  )
+  return Promise.race([searchCache(prompt), timeout])
+}
+
 function CacheWidget({
   results,
   onClose,
@@ -165,8 +174,10 @@ function PromptCacheOverlay() {
   const [results, setResults] = useState<SearchResult[] | null>(null)
   const [delta, setDelta] = useState<DeltaResult | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const adapterRef = useRef<ChatAdapter | null>(null)
   const autoCheckRef = useRef(false)
+  const isLoggedInRef = useRef(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastPromptRef = useRef("")
 
@@ -178,6 +189,20 @@ function PromptCacheOverlay() {
     const onChange = (changes: Record<string, chrome.storage.StorageChange>) => {
       if ("autoCheck" in changes) {
         autoCheckRef.current = (changes.autoCheck.newValue as boolean) ?? false
+      }
+    }
+    chrome.storage.onChanged.addListener(onChange)
+    return () => chrome.storage.onChanged.removeListener(onChange)
+  }, [])
+
+  // Keep isLoggedIn flag in sync with storage
+  useEffect(() => {
+    chrome.storage.local.get(["auth"], (r) => {
+      isLoggedInRef.current = !!(r.auth as { token?: string } | undefined)?.token
+    })
+    const onChange = (changes: Record<string, chrome.storage.StorageChange>) => {
+      if ("auth" in changes) {
+        isLoggedInRef.current = !!(changes.auth.newValue as { token?: string } | undefined)?.token
       }
     }
     chrome.storage.onChanged.addListener(onChange)
@@ -197,9 +222,14 @@ function PromptCacheOverlay() {
         sendCleanup?.()
         sendCleanup = adapter.interceptSend(async (prompt) => {
           if (!autoCheckRef.current) return true // pass-through when disabled
+          if (!isLoggedInRef.current) return true // pass-through when not logged in
           setIsLoading(true)
-          const resp = await searchCache(prompt)
+          const resp = await searchCacheWithTimeout(prompt)
           setIsLoading(false)
+          if (resp?.error === CONNECTION_FAILED) {
+            setError("Connection failed")
+            return true // unblock send on timeout
+          }
           if (
             resp?.success &&
             resp.results?.length > 0 &&
@@ -223,9 +253,14 @@ function PromptCacheOverlay() {
             lastPromptRef.current = text
             if (debounceRef.current) clearTimeout(debounceRef.current)
             debounceRef.current = setTimeout(async () => {
+              if (!isLoggedInRef.current) return // skip when not logged in
               setIsLoading(true)
-              const resp = await searchCache(text)
+              const resp = await searchCacheWithTimeout(text)
               setIsLoading(false)
+              if (resp?.error === CONNECTION_FAILED) {
+                setError("Connection failed")
+                return
+              }
               if (
                 resp?.success &&
                 resp.results?.length > 0 &&
@@ -272,6 +307,11 @@ function PromptCacheOverlay() {
     ) => {
       if (message.type !== "CHECK_PROMPT") return false
 
+      if (!isLoggedInRef.current) {
+        sendResponse({ success: false, error: "Not logged in" })
+        return false
+      }
+
       const adapter = adapterRef.current
       const prompt = adapter ? adapter.getPromptText() : ""
       if (!prompt.trim()) {
@@ -280,8 +320,13 @@ function PromptCacheOverlay() {
       }
 
       setIsLoading(true)
-      searchCache(prompt).then((resp) => {
+      searchCacheWithTimeout(prompt).then((resp) => {
         setIsLoading(false)
+        if (resp?.error === CONNECTION_FAILED) {
+          setError("Connection failed")
+          sendResponse({ success: false, error: CONNECTION_FAILED })
+          return
+        }
         if (
           resp?.success &&
           resp.results?.length > 0 &&
@@ -320,13 +365,22 @@ function PromptCacheOverlay() {
     setResults(null)
   }
 
-  if (!results && !delta && !isLoading) return null
+  if (!results && !delta && !isLoading && !error) return null
 
   return (
     <div className="pc-container">
       {isLoading && (
         <div className="pc-widget pc-loading">
           <span className="pc-icon">⚡</span> Checking cache…
+        </div>
+      )}
+      {error && !isLoading && (
+        <div className="pc-widget pc-error">
+          <div className="pc-header">
+            <span className="pc-icon">⚠</span>
+            <span className="pc-title">{error}</span>
+            <button className="pc-close" onClick={() => setError(null)} aria-label="Dismiss">✕</button>
+          </div>
         </div>
       )}
       {results && !isLoading && (
