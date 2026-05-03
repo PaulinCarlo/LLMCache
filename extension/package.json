@@ -35,6 +35,11 @@
       "storage",
       "activeTab",
       "tabs"
-    ]
+    ],
+    "externally_connectable": {
+      "matches": [
+        "http://localhost:3000/*"
+      ]
+    }
   }
 }

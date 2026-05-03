@@ -5,16 +5,27 @@ const DEBOUNCE_MS = 500
 
 let debounceTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
-/** Reads stored credentials and returns auth headers to attach to every request. */
+/**
+ * External message listener – receives LOGIN_SUCCESS from the website
+ * (configured via externally_connectable in the manifest).
+ * Stores the token so the popup can detect the login immediately.
+ */
+chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "LOGIN_SUCCESS" && message.token) {
+    const auth: { token: string; email?: string } = { token: message.token }
+    if (message.email) auth.email = message.email
+    chrome.storage.local.set({ auth })
+    sendResponse({ success: true })
+  }
+})
+
+/** Reads the stored token and returns auth headers for every API request. */
 async function getAuthHeaders(): Promise<Record<string, string>> {
   return new Promise((resolve) => {
     chrome.storage.local.get(["auth"], (result) => {
-      const auth = result.auth as { userId?: string; apiKey?: string } | undefined
-      if (auth?.apiKey) {
-        resolve({
-          Authorization: `Bearer ${auth.apiKey}`,
-          ...(auth.userId ? { "X-User-Id": auth.userId } : {})
-        })
+      const auth = result.auth as { token?: string } | undefined
+      if (auth?.token) {
+        resolve({ Authorization: `Bearer ${auth.token}` })
       } else {
         resolve({})
       }

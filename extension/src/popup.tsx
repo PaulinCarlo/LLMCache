@@ -22,31 +22,41 @@ interface SaveForm {
 }
 
 interface AuthState {
-  userId: string
-  apiKey: string
+  token: string
+  email?: string
 }
 
 const API_BASE = "http://localhost:5000"
+const WEBSITE_LOGIN_URL = "http://localhost:3000/login"
 
 export default function Popup() {
   const [snippets, setSnippets] = useState<Snippet[]>([])
-  const [tab, setTab] = useState<"browse" | "save" | "account">("browse")
+  const [tab, setTab] = useState<"browse" | "save">("browse")
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<SaveForm>({ prompt: "", code: "", framework: "" })
   const [saveMsg, setSaveMsg] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [autoCheck, setAutoCheck] = useState(false)
-  const [auth, setAuth] = useState<AuthState>({ userId: "", apiKey: "" })
-  const [authSaved, setAuthSaved] = useState(false)
+  const [auth, setAuth] = useState<AuthState>({ token: "" })
   const [checking, setChecking] = useState(false)
 
   useEffect(() => {
-    fetchSnippets()
     chrome.storage.local.get(["autoCheck", "auth"], (result) => {
       setAutoCheck((result.autoCheck as boolean) ?? false)
       if (result.auth) setAuth(result.auth as AuthState)
     })
+
+    // Update auth instantly when the background receives a LOGIN_SUCCESS handshake
+    const onStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes.auth) setAuth((changes.auth.newValue ?? { token: "" }) as AuthState)
+    }
+    chrome.storage.onChanged.addListener(onStorageChange)
+    return () => chrome.storage.onChanged.removeListener(onStorageChange)
   }, [])
+
+  useEffect(() => {
+    if (auth.token) fetchSnippets()
+  }, [auth.token])
 
   const fetchSnippets = async () => {
     try {
@@ -72,19 +82,16 @@ export default function Popup() {
     setChecking(false)
   }
 
-  const handleSaveAuth = () => {
-    chrome.storage.local.set({ auth })
-    setAuthSaved(true)
-    setTimeout(() => setAuthSaved(false), 2000)
-  }
-
   const handleLogout = () => {
-    const empty: AuthState = { userId: "", apiKey: "" }
-    setAuth(empty)
+    setAuth({ token: "" })
     chrome.storage.local.remove("auth")
   }
 
-  const isLoggedIn = auth.userId.trim().length > 0
+  const handleLogin = () => {
+    chrome.tabs.create({ url: WEBSITE_LOGIN_URL })
+  }
+
+  const isLoggedIn = auth.token.trim().length > 0
 
   const handleSave = async () => {
     if (!form.prompt || !form.code) return
@@ -119,14 +126,41 @@ export default function Popup() {
       )
     : snippets
 
+  if (!isLoggedIn) {
+    return (
+      <div className="popup">
+        <div className="popup-header">
+          <span className="popup-logo">⚡</span>
+          <span className="popup-title">PromptCache</span>
+        </div>
+        <div className="login-screen">
+          <div className="login-icon">⚡</div>
+          <h2 className="login-title">Welcome to PromptCache</h2>
+          <p className="login-desc">
+            Sign in to save and retrieve your AI prompt snippets.
+          </p>
+          <button className="login-btn" onClick={handleLogin} aria-label="Sign in or Register (opens in new tab)">
+            Sign in / Register →
+          </button>
+        </div>
+        <div className="popup-footer">
+          <a href="http://localhost:3000" target="_blank" rel="noreferrer">Open Dashboard →</a>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="popup">
       <div className="popup-header">
         <span className="popup-logo">⚡</span>
         <span className="popup-title">PromptCache</span>
-        {isLoggedIn && (
-          <span className="popup-user" title={auth.userId}>👤 {auth.userId}</span>
-        )}
+        <span className="popup-user" title={auth.email ?? "Logged in"}>
+          👤 {auth.email ?? "Logged in"}
+        </span>
+        <button className="header-logout" onClick={handleLogout} title="Logout" aria-label="Logout">
+          ↩
+        </button>
       </div>
 
       <div className="popup-toolbar">
@@ -156,9 +190,6 @@ export default function Popup() {
         </button>
         <button className={`tab ${tab === "save" ? "active" : ""}`} onClick={() => setTab("save")}>
           + Save
-        </button>
-        <button className={`tab ${tab === "account" ? "active" : ""}`} onClick={() => setTab("account")}>
-          Account{isLoggedIn ? " ✓" : ""}
         </button>
       </div>
 
@@ -211,41 +242,6 @@ export default function Popup() {
             {saving ? "Saving…" : "Save Snippet"}
           </button>
           {saveMsg && <div className="save-msg">{saveMsg}</div>}
-        </div>
-      )}
-
-      {tab === "account" && (
-        <div className="save-form">
-          <div className="account-status">
-            {isLoggedIn
-              ? <span className="status-on">● Logged in as {auth.userId}</span>
-              : <span className="status-off">● Not logged in</span>}
-          </div>
-          <input
-            placeholder="User ID / Email"
-            value={auth.userId}
-            onChange={e => setAuth(a => ({ ...a, userId: e.target.value }))}
-          />
-          <input
-            type="password"
-            placeholder="API Key"
-            value={auth.apiKey}
-            onChange={e => setAuth(a => ({ ...a, apiKey: e.target.value }))}
-          />
-          <div className="row">
-            <button
-              className="save-btn"
-              onClick={handleSaveAuth}
-              disabled={!auth.userId || !auth.apiKey}
-            >
-              {authSaved ? "✓ Saved!" : "Save Credentials"}
-            </button>
-            {isLoggedIn && (
-              <button className="save-btn logout-btn" onClick={handleLogout}>
-                Logout
-              </button>
-            )}
-          </div>
         </div>
       )}
 
