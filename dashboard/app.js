@@ -3,6 +3,45 @@ let allSnippets = []
 let currentSnippet = null
 let activeFilter = ''
 
+// ──────────────────────────────────────────────────────────
+// Auth helpers
+// ──────────────────────────────────────────────────────────
+
+function getToken() {
+  return localStorage.getItem('pc_access_token')
+}
+
+function authHeaders() {
+  const token = getToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+function logout() {
+  localStorage.removeItem('pc_access_token')
+  localStorage.removeItem('pc_user_email')
+  localStorage.removeItem('pc_display_name')
+  localStorage.removeItem('pc_user_id')
+  window.location.href = 'login.html'
+}
+
+// Redirect to login if no token is stored
+if (!getToken()) {
+  window.location.href = 'login.html'
+}
+
+// Show logged-in user info in the navbar
+const displayName = localStorage.getItem('pc_display_name') || localStorage.getItem('pc_user_email') || ''
+
+document.addEventListener('DOMContentLoaded', () => {
+  const navUser = document.getElementById('nav-user')
+  if (navUser && displayName) {
+    navUser.innerHTML = `
+      <span class="nav-username">${escHtml(displayName)}</span>
+      <button class="btn btn-sm" onclick="logout()">Sign out</button>
+    `
+  }
+})
+
 async function fetchSnippets(query = '') {
   const grid = document.getElementById('snippets-grid')
   grid.innerHTML = '<div class="loading">Loading snippets…</div>'
@@ -10,7 +49,7 @@ async function fetchSnippets(query = '') {
     const url = query
       ? `${API_BASE}/api/snippets/search?prompt=${encodeURIComponent(query)}&topK=20&minSimilarity=0.3`
       : `${API_BASE}/api/snippets?pageSize=100`
-    const res = await fetch(url)
+    const res = await fetch(url, { headers: authHeaders() })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     allSnippets = data[0]?.snippet ? data.map(d => d.snippet) : data
@@ -108,7 +147,7 @@ async function submitDelta() {
   try {
     const res = await fetch(`${API_BASE}/api/delta`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ newPrompt, cachedSnippetId: currentSnippet.id })
     })
     const delta = await res.json()
@@ -134,7 +173,7 @@ async function deleteSnippet() {
   if (!currentSnippet) return
   if (!confirm(`Delete "${currentSnippet.prompt.slice(0, 60)}…"?`)) return
   try {
-    const res = await fetch(`${API_BASE}/api/snippets/${currentSnippet.id}`, { method: 'DELETE' })
+    const res = await fetch(`${API_BASE}/api/snippets/${currentSnippet.id}`, { method: 'DELETE', headers: authHeaders() })
     if (res.ok) {
       closeDetail()
       fetchSnippets()
@@ -185,7 +224,7 @@ async function saveSnippet(e) {
   try {
     const res = await fetch(`${API_BASE}/api/snippets`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(payload)
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)

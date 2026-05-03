@@ -128,3 +128,15 @@
 /home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/obj/Debug/net10.0/LLMCache.Api.pdb
 /home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/obj/Debug/net10.0/LLMCache.Api.genruntimeconfig.cache
 /home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/obj/Debug/net10.0/ref/LLMCache.Api.dll
+/home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/bin/Debug/net10.0/AspNet.Security.OAuth.Apple.dll
+/home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/bin/Debug/net10.0/AspNet.Security.OAuth.GitHub.dll
+/home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/bin/Debug/net10.0/Microsoft.AspNetCore.Authentication.Google.dll
+/home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/bin/Debug/net10.0/Microsoft.AspNetCore.Authentication.JwtBearer.dll
+/home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/bin/Debug/net10.0/Microsoft.AspNetCore.Identity.EntityFrameworkCore.dll
+/home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/bin/Debug/net10.0/Microsoft.IdentityModel.Abstractions.dll
+/home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/bin/Debug/net10.0/Microsoft.IdentityModel.JsonWebTokens.dll
+/home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/bin/Debug/net10.0/Microsoft.IdentityModel.Logging.dll
+/home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/bin/Debug/net10.0/Microsoft.IdentityModel.Protocols.dll
+/home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/bin/Debug/net10.0/Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
+/home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/bin/Debug/net10.0/Microsoft.IdentityModel.Tokens.dll
+/home/runner/work/LLMCache/LLMCache/src/LLMCache.Api/bin/Debug/net10.0/System.IdentityModel.Tokens.Jwt.dll

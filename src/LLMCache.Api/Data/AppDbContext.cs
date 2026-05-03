@@ -1,12 +1,14 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using LLMCache.Api.Models;
 using Pgvector.EntityFrameworkCore;
 
 namespace LLMCache.Api.Data;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public class AppDbContext(DbContextOptions<AppDbContext> options)
+    : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>(options)
 {
-    public DbSet<User> Users => Set<User>();
     public DbSet<Snippet> Snippets => Set<Snippet>();
     public DbSet<SnippetEmbedding> SnippetEmbeddings => Set<SnippetEmbedding>();
 
@@ -21,12 +23,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             modelBuilder.HasPostgresExtension("vector");
         }
 
-        modelBuilder.Entity<User>(entity =>
+        modelBuilder.Entity<ApplicationUser>(entity =>
         {
-            entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.Email).IsUnique();
-            entity.Property(e => e.Email).IsRequired().HasMaxLength(254);
-            entity.Property(e => e.Username).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.DisplayName).HasMaxLength(100);
+            entity.Property(e => e.ProfilePictureUrl).HasMaxLength(500);
+            entity.Property(e => e.OrganizationId).HasMaxLength(100);
         });
 
         modelBuilder.Entity<Snippet>(entity =>

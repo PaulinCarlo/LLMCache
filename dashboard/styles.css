@@ -25,6 +25,9 @@ body { background: var(--bg); color: var(--text); font-family: -apple-system, Bl
 .nav-brand { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; color: var(--accent); }
 .nav-logo { font-size: 22px; }
 .nav-stats { color: var(--text-muted); font-size: 13px; }
+.nav-user { display: flex; align-items: center; gap: 10px; }
+.nav-username { font-size: 13px; color: var(--text-muted); }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
 
 .container { max-width: 1200px; margin: 0 auto; padding: 32px; }
 
