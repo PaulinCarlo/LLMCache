@@ -7,7 +7,6 @@ interface Snippet {
   prompt: string
   code: string
   lineCount: number
-  intent: string
   createdAt: string
   environment: {
     language?: string
@@ -19,23 +18,34 @@ interface Snippet {
 interface SaveForm {
   prompt: string
   code: string
-  intent: string
-  language: string
   framework: string
+}
+
+interface AuthState {
+  userId: string
+  apiKey: string
 }
 
 const API_BASE = "http://localhost:5000"
 
 export default function Popup() {
   const [snippets, setSnippets] = useState<Snippet[]>([])
-  const [tab, setTab] = useState<"browse" | "save">("browse")
+  const [tab, setTab] = useState<"browse" | "save" | "account">("browse")
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState<SaveForm>({ prompt: "", code: "", intent: "", language: "", framework: "" })
+  const [form, setForm] = useState<SaveForm>({ prompt: "", code: "", framework: "" })
   const [saveMsg, setSaveMsg] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
+  const [autoCheck, setAutoCheck] = useState(false)
+  const [auth, setAuth] = useState<AuthState>({ userId: "", apiKey: "" })
+  const [authSaved, setAuthSaved] = useState(false)
+  const [checking, setChecking] = useState(false)
 
   useEffect(() => {
     fetchSnippets()
+    chrome.storage.local.get(["autoCheck", "auth"], (result) => {
+      setAutoCheck((result.autoCheck as boolean) ?? false)
+      if (result.auth) setAuth(result.auth as AuthState)
+    })
   }, [])
 
   const fetchSnippets = async () => {
@@ -44,6 +54,37 @@ export default function Popup() {
       if (res.ok) setSnippets(await res.json())
     } catch { /* backend not running */ }
   }
+
+  const handleAutoCheckToggle = () => {
+    const next = !autoCheck
+    setAutoCheck(next)
+    chrome.storage.local.set({ autoCheck: next })
+  }
+
+  const handleCheckForPrompt = async () => {
+    setChecking(true)
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      if (activeTab?.id) {
+        await chrome.tabs.sendMessage(activeTab.id, { type: "CHECK_PROMPT" })
+      }
+    } catch { /* content script not available on this page */ }
+    setChecking(false)
+  }
+
+  const handleSaveAuth = () => {
+    chrome.storage.local.set({ auth })
+    setAuthSaved(true)
+    setTimeout(() => setAuthSaved(false), 2000)
+  }
+
+  const handleLogout = () => {
+    const empty: AuthState = { userId: "", apiKey: "" }
+    setAuth(empty)
+    chrome.storage.local.remove("auth")
+  }
+
+  const isLoggedIn = auth.userId.trim().length > 0
 
   const handleSave = async () => {
     if (!form.prompt || !form.code) return
@@ -55,8 +96,7 @@ export default function Popup() {
         payload: {
           prompt: form.prompt,
           code: form.code,
-          intent: form.intent,
-          environment: { language: form.language, framework: form.framework },
+          environment: { framework: form.framework || undefined },
           constraints: "",
           tags: []
         }
@@ -65,7 +105,7 @@ export default function Popup() {
     setSaving(false)
     if (resp?.success) {
       setSaveMsg("✓ Snippet saved!")
-      setForm({ prompt: "", code: "", intent: "", language: "", framework: "" })
+      setForm({ prompt: "", code: "", framework: "" })
       fetchSnippets()
       setTimeout(() => setSaveMsg(""), 2500)
     }
@@ -84,6 +124,30 @@ export default function Popup() {
       <div className="popup-header">
         <span className="popup-logo">⚡</span>
         <span className="popup-title">PromptCache</span>
+        {isLoggedIn && (
+          <span className="popup-user" title={auth.userId}>👤 {auth.userId}</span>
+        )}
+      </div>
+
+      <div className="popup-toolbar">
+        <button
+          className={`toggle-btn ${autoCheck ? "on" : ""}`}
+          onClick={handleAutoCheckToggle}
+          title="When on, cache is checked before every send"
+        >
+          <span className="toggle-track">
+            <span className="toggle-knob" />
+          </span>
+          <span className="toggle-label">Auto Check</span>
+        </button>
+        <button
+          className="check-btn"
+          onClick={handleCheckForPrompt}
+          disabled={checking}
+          title="Check the current prompt against the cache"
+        >
+          {checking ? "…" : "Check ⚡"}
+        </button>
       </div>
 
       <div className="popup-tabs">
@@ -91,7 +155,10 @@ export default function Popup() {
           Browse ({snippets.length})
         </button>
         <button className={`tab ${tab === "save" ? "active" : ""}`} onClick={() => setTab("save")}>
-          + Save New
+          + Save
+        </button>
+        <button className={`tab ${tab === "account" ? "active" : ""}`} onClick={() => setTab("account")}>
+          Account{isLoggedIn ? " ✓" : ""}
         </button>
       </div>
 
@@ -136,26 +203,49 @@ export default function Popup() {
             rows={5}
           />
           <input
-            placeholder="Intent (optional: why you needed this)"
-            value={form.intent}
-            onChange={e => setForm(f => ({ ...f, intent: e.target.value }))}
+            placeholder="Framework (e.g. React) — optional"
+            value={form.framework}
+            onChange={e => setForm(f => ({ ...f, framework: e.target.value }))}
           />
-          <div className="row">
-            <input
-              placeholder="Language (e.g. TypeScript)"
-              value={form.language}
-              onChange={e => setForm(f => ({ ...f, language: e.target.value }))}
-            />
-            <input
-              placeholder="Framework (e.g. React)"
-              value={form.framework}
-              onChange={e => setForm(f => ({ ...f, framework: e.target.value }))}
-            />
-          </div>
           <button className="save-btn" onClick={handleSave} disabled={saving || !form.prompt || !form.code}>
             {saving ? "Saving…" : "Save Snippet"}
           </button>
           {saveMsg && <div className="save-msg">{saveMsg}</div>}
+        </div>
+      )}
+
+      {tab === "account" && (
+        <div className="save-form">
+          <div className="account-status">
+            {isLoggedIn
+              ? <span className="status-on">● Logged in as {auth.userId}</span>
+              : <span className="status-off">● Not logged in</span>}
+          </div>
+          <input
+            placeholder="User ID / Email"
+            value={auth.userId}
+            onChange={e => setAuth(a => ({ ...a, userId: e.target.value }))}
+          />
+          <input
+            type="password"
+            placeholder="API Key"
+            value={auth.apiKey}
+            onChange={e => setAuth(a => ({ ...a, apiKey: e.target.value }))}
+          />
+          <div className="row">
+            <button
+              className="save-btn"
+              onClick={handleSaveAuth}
+              disabled={!auth.userId || !auth.apiKey}
+            >
+              {authSaved ? "✓ Saved!" : "Save Credentials"}
+            </button>
+            {isLoggedIn && (
+              <button className="save-btn logout-btn" onClick={handleLogout}>
+                Logout
+              </button>
+            )}
+          </div>
         </div>
       )}
 

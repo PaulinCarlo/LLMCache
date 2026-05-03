@@ -2,19 +2,35 @@
 body { width: 380px; min-height: 480px; background: #1e1e2e; color: #cdd6f4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 
 .popup { display: flex; flex-direction: column; width: 380px; min-height: 480px; }
-.popup-header { display: flex; align-items: center; gap: 8px; padding: 14px 16px; background: #181825; border-bottom: 1px solid #313244; }
+.popup-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #181825; border-bottom: 1px solid #313244; }
 .popup-logo { font-size: 20px; }
-.popup-title { font-size: 16px; font-weight: 700; color: #cba6f7; }
+.popup-title { font-size: 16px; font-weight: 700; color: #cba6f7; flex: 1; }
+.popup-user { font-size: 11px; color: #89b4fa; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ── Toolbar ── */
+.popup-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #181825; border-bottom: 1px solid #313244; }
+
+.toggle-btn { display: flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; padding: 0; flex: 1; }
+.toggle-track { position: relative; width: 32px; height: 18px; background: #45475a; border-radius: 9px; transition: background 0.2s; flex-shrink: 0; }
+.toggle-btn.on .toggle-track { background: #cba6f7; }
+.toggle-knob { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: #cdd6f4; border-radius: 50%; transition: transform 0.2s; }
+.toggle-btn.on .toggle-knob { transform: translateX(14px); }
+.toggle-label { font-size: 12px; color: #cdd6f4; }
+
+.check-btn { padding: 5px 12px; background: #313244; border: 1px solid #45475a; border-radius: 6px; color: #cdd6f4; cursor: pointer; font-size: 12px; transition: background 0.15s; white-space: nowrap; }
+.check-btn:hover:not(:disabled) { background: #45475a; }
+.check-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Tabs ── */
 .popup-tabs { display: flex; border-bottom: 1px solid #313244; }
-.tab { flex: 1; padding: 10px; background: none; border: none; color: #6c7086; cursor: pointer; font-size: 13px; transition: all 0.15s; border-bottom: 2px solid transparent; }
+.tab { flex: 1; padding: 10px; background: none; border: none; color: #6c7086; cursor: pointer; font-size: 12px; transition: all 0.15s; border-bottom: 2px solid transparent; }
 .tab:hover { color: #cdd6f4; }
 .tab.active { color: #cba6f7; border-bottom-color: #cba6f7; }
 
 .popup-search { width: 100%; padding: 8px 12px; background: #313244; border: 1px solid #45475a; border-radius: 6px; color: #cdd6f4; font-size: 12px; margin: 10px 16px; width: calc(100% - 32px); outline: none; }
 .popup-search::placeholder { color: #6c7086; }
 
-.snippet-list { padding: 0 16px 10px; max-height: 340px; overflow-y: auto; }
+.snippet-list { padding: 0 16px 10px; max-height: 320px; overflow-y: auto; }
 .snippet-card { padding: 10px; border: 1px solid #313244; border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s; }
 .snippet-card:hover { border-color: #cba6f7; }
 .snippet-prompt { font-size: 12px; line-height: 1.4; color: #cdd6f4; margin-bottom: 6px; }
@@ -28,11 +44,18 @@ body { width: 380px; min-height: 480px; background: #1e1e2e; color: #cdd6f4; fon
 .save-form textarea::placeholder, .save-form input::placeholder { color: #6c7086; }
 .save-form textarea:focus, .save-form input:focus { border-color: #cba6f7; }
 .row { display: flex; gap: 8px; }
-.row input { flex: 1; }
+.row input, .row button { flex: 1; }
 .save-btn { padding: 10px; background: #cba6f7; color: #1e1e2e; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 13px; transition: background 0.15s; }
-.save-btn:hover { background: #b4befe; }
+.save-btn:hover:not(:disabled) { background: #b4befe; }
 .save-btn:disabled { background: #45475a; color: #6c7086; cursor: not-allowed; }
 .save-msg { text-align: center; color: #a6e3a1; font-size: 12px; }
+.logout-btn { background: #f38ba8; }
+.logout-btn:hover { background: #eba0ac; }
+
+/* ── Account tab ── */
+.account-status { font-size: 12px; padding: 4px 0; }
+.status-on { color: #a6e3a1; }
+.status-off { color: #6c7086; }
 
 .popup-footer { padding: 10px 16px; border-top: 1px solid #313244; margin-top: auto; }
 .popup-footer a { color: #89b4fa; text-decoration: none; font-size: 12px; }
