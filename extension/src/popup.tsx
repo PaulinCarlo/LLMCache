@@ -26,7 +26,7 @@ interface AuthState {
   email?: string
 }
 
-const API_BASE = "http://localhost:5001"
+const API_BASE = "http://localhost:3000"
 const WEBSITE_LOGIN_URL = "http://localhost:3000/login"
 
 export default function Popup() {
