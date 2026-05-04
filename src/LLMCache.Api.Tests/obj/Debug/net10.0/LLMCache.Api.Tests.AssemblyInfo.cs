@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LLMCache.Api.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+85638a5fb1d7f59727ba355ee057ef4090f95551")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9d0f4ed2d9d9b1f4cb22a2527a77dd603ddf130b")]
 [assembly: System.Reflection.AssemblyProductAttribute("LLMCache.Api.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LLMCache.Api.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
