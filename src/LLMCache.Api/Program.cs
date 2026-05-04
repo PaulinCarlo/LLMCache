@@ -48,7 +48,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
 var jwtSettings = builder.Configuration.GetSection("Jwt");
 var jwtKey = jwtSettings["Key"] ?? throw new InvalidOperationException("Jwt:Key is not configured.");
 
-builder.Services.AddAuthentication(options =>
+var authenticationBuilder = builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -65,37 +65,48 @@ builder.Services.AddAuthentication(options =>
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
-    })
+    });
 
-    // ── SOCIAL LOGINS ──────────────────────────────────────────
-    // Configure each provider in appsettings.json or user-secrets.
-    // Remove the leading // on each block to activate.
-    // ──────────────────────────────────────────────────────────
+// ── SOCIAL LOGINS ──────────────────────────────────────────
+// Each provider is only registered when its ClientId is configured
+// in appsettings.json or user-secrets; empty credentials are skipped
+// to prevent OAuthOptions.Validate() from throwing on every request.
+// ──────────────────────────────────────────────────────────
 
-    // Google
-    .AddGoogle(options =>
+if (!string.IsNullOrEmpty(builder.Configuration["Authentication:Google:ClientId"]) &&
+    !string.IsNullOrEmpty(builder.Configuration["Authentication:Google:ClientSecret"]))
+{
+    authenticationBuilder.AddGoogle(options =>
     {
-        options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? "";
-        options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? "";
-    })
+        options.ClientId = builder.Configuration["Authentication:Google:ClientId"]!;
+        options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"]!;
+    });
+}
 
-    // GitHub
-    .AddGitHub(options =>
+if (!string.IsNullOrEmpty(builder.Configuration["Authentication:GitHub:ClientId"]) &&
+    !string.IsNullOrEmpty(builder.Configuration["Authentication:GitHub:ClientSecret"]))
+{
+    authenticationBuilder.AddGitHub(options =>
     {
-        options.ClientId = builder.Configuration["Authentication:GitHub:ClientId"] ?? "";
-        options.ClientSecret = builder.Configuration["Authentication:GitHub:ClientSecret"] ?? "";
+        options.ClientId = builder.Configuration["Authentication:GitHub:ClientId"]!;
+        options.ClientSecret = builder.Configuration["Authentication:GitHub:ClientSecret"]!;
         options.Scope.Add("user:email");
-    })
+    });
+}
 
-    // Apple
-    .AddApple(options =>
+if (!string.IsNullOrEmpty(builder.Configuration["Authentication:Apple:ClientId"]) &&
+    !string.IsNullOrEmpty(builder.Configuration["Authentication:Apple:KeyId"]) &&
+    !string.IsNullOrEmpty(builder.Configuration["Authentication:Apple:TeamId"]))
+{
+    authenticationBuilder.AddApple(options =>
     {
-        options.ClientId = builder.Configuration["Authentication:Apple:ClientId"] ?? "";
-        options.KeyId = builder.Configuration["Authentication:Apple:KeyId"] ?? "";
-        options.TeamId = builder.Configuration["Authentication:Apple:TeamId"] ?? "";
+        options.ClientId = builder.Configuration["Authentication:Apple:ClientId"]!;
+        options.KeyId = builder.Configuration["Authentication:Apple:KeyId"]!;
+        options.TeamId = builder.Configuration["Authentication:Apple:TeamId"]!;
         // Private key path — store the .p8 file outside the repo and reference via config
         // options.PrivateKey = ...
     });
+}
 
 builder.Services.AddAuthorization();
 
