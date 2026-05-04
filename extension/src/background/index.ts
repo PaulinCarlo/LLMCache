@@ -1,6 +1,6 @@
 import type { PlasmoMessaging } from "@plasmohq/messaging"
 
-const API_BASE = "http://localhost:5000"
+const API_BASE = "http://localhost:5001"
 const DEBOUNCE_MS = 500
 
 let debounceTimers = new Map<number, ReturnType<typeof setTimeout>>()

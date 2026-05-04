@@ -21,7 +21,7 @@ services:
       context: ./src/LLMCache.Api
       dockerfile: Dockerfile
     ports:
-      - "5000:8080"
+      - "5001:8080"
     environment:
       ConnectionStrings__DefaultConnection: "Host=db;Database=promptcache;Username=postgres;Password=postgres"
       Embeddings__Provider: "openai"
@@ -31,7 +31,7 @@ services:
       Delta__Model: "gemini-1.5-flash"
       Delta__ApiKey: "${GOOGLE_API_KEY:-}"
       AllowedOrigins__0: "http://localhost:3000"
-      AllowedOrigins__1: "http://localhost:5173"
+      AllowedOrigins__1: "http://localhost:5001"
       ASPNETCORE_ENVIRONMENT: "Production"
     depends_on:
       db:
