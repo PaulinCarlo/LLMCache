@@ -11,11 +11,11 @@ using Pgvector;
 
 #nullable disable
 
-namespace LLMCache.Api.Data.Migrations
+namespace LLMCache.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260503163130_AddIdentity")]
-    partial class AddIdentity
+    [Migration("20260504154431_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

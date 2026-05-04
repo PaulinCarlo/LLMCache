@@ -10,7 +10,7 @@ using Pgvector;
 
 #nullable disable
 
-namespace LLMCache.Api.Data.Migrations
+namespace LLMCache.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
     partial class AppDbContextModelSnapshot : ModelSnapshot
