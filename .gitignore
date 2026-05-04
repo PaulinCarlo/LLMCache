@@ -14,3 +14,10 @@ extension/build/
 # OS
 .DS_Store
 Thumbs.db
+src/LLMCache.Api/bin/*
+
+*.obj
+*.dll
+*.pdb
+*.cache
+*.log

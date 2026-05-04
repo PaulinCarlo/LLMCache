@@ -16,6 +16,7 @@ services:
       retries: 10
 
   api:
+    profiles: ["services"]
     build:
       context: ./src/LLMCache.Api
       dockerfile: Dockerfile
