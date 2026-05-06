@@ -3,11 +3,84 @@ using LLMCache.Api.Data;
 using LLMCache.Api.Models;
 using LLMCache.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ──────────────────────────────────────────────────────────────
+// OpenTelemetry — traces, metrics, logs
+// ──────────────────────────────────────────────────────────────
+var otelServiceName = builder.Configuration["OpenTelemetry:ServiceName"] ?? "LLMCache.Api";
+var otelEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+
+var resourceBuilder = ResourceBuilder.CreateDefault()
+    .AddService(otelServiceName)
+    .AddTelemetrySdk()
+    .AddEnvironmentVariableDetector();
+
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .SetResourceBuilder(resourceBuilder)
+            .AddAspNetCoreInstrumentation(opts =>
+            {
+                opts.RecordException = true;
+            })
+            .AddHttpClientInstrumentation(opts =>
+            {
+                opts.RecordException = true;
+            });
+
+        if (!string.IsNullOrEmpty(otelEndpoint))
+            tracing.AddOtlpExporter(opts => opts.Endpoint = new Uri(otelEndpoint));
+
+        if (builder.Environment.IsDevelopment())
+            tracing.AddConsoleExporter();
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics
+            .SetResourceBuilder(resourceBuilder)
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        if (!string.IsNullOrEmpty(otelEndpoint))
+            metrics.AddOtlpExporter(opts => opts.Endpoint = new Uri(otelEndpoint));
+    });
+
+builder.Logging.AddOpenTelemetry(logging =>
+{
+    logging.SetResourceBuilder(resourceBuilder);
+    logging.IncludeFormattedMessage = true;
+    logging.IncludeScopes = true;
+    logging.ParseStateValues = true;
+
+    if (!string.IsNullOrEmpty(otelEndpoint))
+        logging.AddOtlpExporter(opts => opts.Endpoint = new Uri(otelEndpoint));
+
+    if (builder.Environment.IsDevelopment())
+        logging.AddConsoleExporter();
+});
+
+// ──────────────────────────────────────────────────────────────
+// HTTP request logging
+// ──────────────────────────────────────────────────────────────
+builder.Services.AddHttpLogging(logging =>
+{
+    logging.LoggingFields = HttpLoggingFields.RequestMethod
+                          | HttpLoggingFields.RequestPath
+                          | HttpLoggingFields.RequestQuery
+                          | HttpLoggingFields.ResponseStatusCode
+                          | HttpLoggingFields.Duration;
+});
 
 // ──────────────────────────────────────────────────────────────
 // Database
@@ -178,6 +251,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+app.UseHttpLogging();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();

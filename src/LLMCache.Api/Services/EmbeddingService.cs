@@ -18,18 +18,28 @@ public class EmbeddingService(HttpClient httpClient, IConfiguration config, ILog
             return new float[1536];
         }
 
+        logger.LogDebug(
+            "Generating embedding. Provider={Provider} Model={Model} TextLength={TextLength}",
+            _provider, _model, text.Length);
+
         try
         {
-            return _provider.ToLowerInvariant() switch
+            var vector = _provider.ToLowerInvariant() switch
             {
                 "openai" => await GenerateOpenAiEmbeddingAsync(text, ct),
                 "google" => await GenerateGoogleEmbeddingAsync(text, ct),
                 _ => throw new InvalidOperationException($"Unknown embedding provider: {_provider}")
             };
+
+            logger.LogDebug(
+                "Embedding generated successfully. Provider={Provider} Dimensions={Dimensions}",
+                _provider, vector.Length);
+
+            return vector;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to generate embedding for text");
+            logger.LogError(ex, "Failed to generate embedding for text. Provider={Provider} Model={Model}", _provider, _model);
             throw;
         }
     }
