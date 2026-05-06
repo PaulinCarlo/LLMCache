@@ -17,7 +17,7 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
         logger.LogDebug(
             "Creating snippet for user {UserId}. Language={Language} LineCount={LineCount}",
             userId,
-            request.Environment.Language,
+            SanitizeForLog(request.Environment.Language),
             lineCount);
 
         var snippet = new Snippet
@@ -203,4 +203,8 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
             CustomMetadata = snippet.Environment.CustomMetadata
         }
     };
+
+    /// <summary>Strips newline characters to prevent log-injection attacks.</summary>
+    private static string SanitizeForLog(string? value) =>
+        (value ?? string.Empty).Replace("\r", "").Replace("\n", "");
 }
