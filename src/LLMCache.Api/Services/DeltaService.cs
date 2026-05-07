@@ -24,19 +24,26 @@ public class DeltaService(
     {
         var sw = Stopwatch.StartNew();
 
+        logger.LogDebug(
+            "ComputeDelta started. HasCachedSnippetId={HasCachedSnippetId} Provider={Provider} Model={Model}",
+            request.CachedSnippetId.HasValue, _provider, _model);
+
         SnippetResponse? cached;
         double similarityScore;
 
         if (request.CachedSnippetId.HasValue)
         {
+            logger.LogDebug("Looking up explicit cached snippet {SnippetId}", request.CachedSnippetId.Value);
             cached = await snippetService.GetSnippetAsync(request.CachedSnippetId.Value, ct);
             similarityScore = cached is not null ? 1.0 : 0.0;
         }
         else
         {
+            logger.LogDebug("Searching for best cached snippet match");
             var searchResults = await snippetService.SearchSimilarAsync(request.NewPrompt, 1, 0.5, ct);
             if (searchResults.Count == 0)
             {
+                logger.LogInformation("ComputeDelta: cache miss — no similar snippet found. ProcessingTimeMs={ProcessingTimeMs}", sw.ElapsedMilliseconds);
                 return new DeltaResponse
                 {
                     CacheStatus = "miss",
@@ -47,10 +54,12 @@ public class DeltaService(
             }
             cached = searchResults[0].Snippet;
             similarityScore = searchResults[0].SimilarityScore;
+            logger.LogDebug("Best match found. SnippetId={SnippetId} SimilarityScore={SimilarityScore:F4}", cached.Id, similarityScore);
         }
 
         if (cached is null)
         {
+            logger.LogInformation("ComputeDelta: cache miss — requested snippet not found. ProcessingTimeMs={ProcessingTimeMs}", sw.ElapsedMilliseconds);
             return new DeltaResponse
             {
                 CacheStatus = "miss",
@@ -60,12 +69,19 @@ public class DeltaService(
             };
         }
 
+        logger.LogDebug("Running LLM delta analysis for snippet {SnippetId}", cached.Id);
         var deltaAnalysis = await AnalyzeWithLlmAsync(request.NewPrompt, cached, ct);
 
         sw.Stop();
+
+        var status = deltaAnalysis.ConfidenceScore >= SimilarityThreshold ? "hit" : "partial";
+        logger.LogInformation(
+            "ComputeDelta completed. CacheStatus={CacheStatus} ConfidenceScore={ConfidenceScore} ProcessingTimeMs={ProcessingTimeMs}",
+            status, deltaAnalysis.ConfidenceScore, sw.ElapsedMilliseconds);
+
         return new DeltaResponse
         {
-            CacheStatus = deltaAnalysis.ConfidenceScore >= SimilarityThreshold ? "hit" : "partial",
+            CacheStatus = status,
             CachedSnippet = cached,
             ConfidenceScore = deltaAnalysis.ConfidenceScore,
             DiffSummary = deltaAnalysis.DiffSummary,

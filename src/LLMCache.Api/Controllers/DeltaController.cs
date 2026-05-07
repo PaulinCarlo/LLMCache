@@ -7,7 +7,7 @@ namespace LLMCache.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
-public class DeltaController(IDeltaService deltaService) : ControllerBase
+public class DeltaController(IDeltaService deltaService, ILogger<DeltaController> logger) : ControllerBase
 {
     /// <summary>
     /// Computes the delta between a new prompt and the best cached snippet.
@@ -23,7 +23,13 @@ public class DeltaController(IDeltaService deltaService) : ControllerBase
         if (string.IsNullOrWhiteSpace(request.NewPrompt))
             return BadRequest("NewPrompt is required");
 
+        logger.LogInformation(
+            "ComputeDelta request received. HasCachedSnippetId={HasCachedSnippetId} PromptLength={PromptLength}",
+            request.CachedSnippetId.HasValue,
+            request.NewPrompt.Length);
+
         var result = await deltaService.ComputeDeltaAsync(request, ct);
+
         return Ok(result);
     }
 }
