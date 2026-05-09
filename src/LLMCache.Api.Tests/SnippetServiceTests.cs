@@ -54,6 +54,7 @@ public class SnippetServiceTests
         Assert.Equal(request.Prompt, result.Prompt);
         Assert.Equal(request.Code, result.Code);
         Assert.Equal(5, result.LineCount);
+        Assert.Equal(string.Empty, result.Intent);
         Assert.Equal("CSS", result.Environment.Language);
         Assert.Contains("css", result.Tags);
     }
