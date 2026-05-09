@@ -111,7 +111,7 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
         var pgVector = new Vector(queryVector);
 
         var results = await db.SnippetEmbeddings
-            .Include(e => e.Snippet)
+            .Include(e => e.Snippet!)
             .ThenInclude(s => s.Environment)
             .ThenInclude(e => e.CodeType)
             .OrderBy(e => e.EmbeddingVector.CosineDistance(pgVector))

@@ -2,6 +2,7 @@ using System.Text.Json;
 using LLMCache.Api.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore;
 using Pgvector.EntityFrameworkCore;
 
@@ -23,8 +24,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
 
         if (!isInMemory)
         {
+            modelBuilder.HasPostgresExtension("hstore");
             modelBuilder.HasPostgresExtension("vector");
         }
+
+        var keyDependenciesComparer = new ValueComparer<List<string>>(
+            (left, right) => SequenceEqual(left, right),
+            values => GetSequenceHashCode(values),
+            values => CloneList(values));
+
+        var customMetadataComparer = new ValueComparer<Dictionary<string, string>>(
+            (left, right) => DictionaryEqual(left, right),
+            values => GetDictionaryHashCode(values),
+            values => CloneDictionary(values));
 
         modelBuilder.Entity<ApplicationUser>(entity =>
         {
@@ -54,11 +66,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             entity.Property(e => e.KeyDependencies)
                 .HasConversion(
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? []);
+                    v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>())
+                .Metadata.SetValueComparer(keyDependenciesComparer);
             entity.Property(e => e.CustomMetadata)
                 .HasConversion(
                     v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions?)null) ?? []);
+                    v => JsonSerializer.Deserialize<Dictionary<string, string>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, string>())
+                .Metadata.SetValueComparer(customMetadataComparer);
 
             if (!isInMemory)
             {
@@ -120,4 +134,37 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
                   .OnDelete(DeleteBehavior.Cascade);
         });
     }
+
+    private static List<string> CloneList(List<string>? values) =>
+        values?.ToList() ?? new List<string>();
+
+    private static Dictionary<string, string> CloneDictionary(Dictionary<string, string>? values) =>
+        values?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value) ?? new Dictionary<string, string>();
+
+    private static bool SequenceEqual(List<string>? left, List<string>? right) =>
+        (left ?? new List<string>()).SequenceEqual(right ?? new List<string>());
+
+    private static int GetSequenceHashCode(List<string>? values) =>
+        (values ?? new List<string>()).Aggregate(0, HashCode.Combine);
+
+    private static bool DictionaryEqual(Dictionary<string, string>? left, Dictionary<string, string>? right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left is null || right is null || left.Count != right.Count)
+        {
+            return false;
+        }
+
+        return left.OrderBy(kvp => kvp.Key)
+            .SequenceEqual(right.OrderBy(kvp => kvp.Key));
+    }
+
+    private static int GetDictionaryHashCode(Dictionary<string, string>? values) =>
+        (values ?? new Dictionary<string, string>())
+            .OrderBy(kvp => kvp.Key)
+            .Aggregate(0, (hash, kvp) => HashCode.Combine(hash, kvp.Key, kvp.Value));
 }
