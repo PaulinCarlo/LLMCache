@@ -188,6 +188,30 @@ public class SnippetServiceTests
     }
 
     [Fact]
+    public async Task CreateSnippet_ReusesMatchingEnvironment()
+    {
+        var request = new CreateSnippetRequest
+        {
+            Prompt = "Create a typed TypeScript helper function",
+            Code = "export const identity = <T>(value: T) => value;",
+            Environment = new SnippetEnvironmentDto
+            {
+                Language = "TypeScript",
+                LanguageVersion = "5.0",
+                Framework = "None",
+                StrictMode = true,
+                PackageManager = "pnpm"
+            }
+        };
+
+        await _service.CreateSnippetAsync(request, TestUserId);
+        await _service.CreateSnippetAsync(request, TestUserId);
+
+        Assert.Single(_db.SnippetEnvironments);
+        Assert.Single(_db.CodeTypes);
+    }
+
+    [Fact]
     public void CreateSnippetRequest_RequiredFields_Validation()
     {
         var request = new CreateSnippetRequest

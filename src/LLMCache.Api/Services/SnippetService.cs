@@ -10,9 +10,11 @@ namespace LLMCache.Api.Services;
 public class SnippetService(AppDbContext db, IEmbeddingService embeddingService, IConfiguration config, ILogger<SnippetService> logger) : ISnippetService
 {
     private readonly string _embeddingModel = config["Embeddings:Model"] ?? "text-embedding-3-small";
+
     public async Task<SnippetResponse> CreateSnippetAsync(CreateSnippetRequest request, Guid userId, CancellationToken ct = default)
     {
         var lineCount = request.Code.Split('\n', StringSplitOptions.None).Length;
+        var environment = await GetOrCreateEnvironmentAsync(request.Environment, ct);
 
         logger.LogDebug(
             "Creating snippet for user {UserId}. Language={Language} LineCount={LineCount}",
@@ -30,21 +32,8 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
             Constraints = request.Constraints,
             Tags = request.Tags,
             IsPublic = request.IsPublic,
-            Environment = new SnippetEnvironment
-            {
-                Language = request.Environment.Language,
-                LanguageVersion = request.Environment.LanguageVersion,
-                Framework = request.Environment.Framework,
-                FrameworkVersion = request.Environment.FrameworkVersion,
-                RuntimeVersion = request.Environment.RuntimeVersion,
-                StrictMode = request.Environment.StrictMode,
-                PackageManager = request.Environment.PackageManager,
-                KeyDependencies = request.Environment.KeyDependencies,
-                TargetPlatform = request.Environment.TargetPlatform,
-                OperatingSystem = request.Environment.OperatingSystem,
-                BuildTool = request.Environment.BuildTool,
-                CustomMetadata = request.Environment.CustomMetadata
-            }
+            Environment = environment,
+            EnvironmentId = environment.Id
         };
 
         db.Snippets.Add(snippet);
@@ -78,6 +67,8 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
     {
         logger.LogDebug("Fetching snippet {SnippetId}", id);
         var snippet = await db.Snippets
+            .Include(s => s.Environment)
+            .ThenInclude(e => e.CodeType)
             .Include(s => s.Embedding)
             .FirstOrDefaultAsync(s => s.Id == id, ct);
         if (snippet is null)
@@ -89,6 +80,8 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
     {
         logger.LogDebug("Listing snippets for user {UserId}. Page={Page} PageSize={PageSize}", userId, page, pageSize);
         var snippets = await db.Snippets
+            .Include(s => s.Environment)
+            .ThenInclude(e => e.CodeType)
             .Where(s => s.UserId == userId)
             .OrderByDescending(s => s.CreatedAt)
             .Skip((page - 1) * pageSize)
@@ -118,9 +111,10 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
         var pgVector = new Vector(queryVector);
 
         var results = await db.SnippetEmbeddings
-            .Include(e => e.Snippet)
+            .Include(e => e.Snippet!)
+            .ThenInclude(s => s.Environment)
+            .ThenInclude(e => e.CodeType)
             .OrderBy(e => e.EmbeddingVector.CosineDistance(pgVector))
-            // Fetch topK*2 candidates so that enough results remain after filtering by minSimilarity
             .Take(topK * 2)
             .Select(e => new
             {
@@ -161,6 +155,83 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
         return true;
     }
 
+    private async Task<SnippetEnvironment> GetOrCreateEnvironmentAsync(SnippetEnvironmentDto requestEnvironment, CancellationToken ct)
+    {
+        var codeType = await GetOrCreateCodeTypeAsync(requestEnvironment.Language, ct);
+        var codeTypeId = codeType?.Id;
+        var keyDependencies = requestEnvironment.KeyDependencies?.ToList() ?? [];
+        var customMetadata = requestEnvironment.CustomMetadata is null
+            ? new Dictionary<string, string>()
+            : new Dictionary<string, string>(requestEnvironment.CustomMetadata);
+
+        var candidates = await db.SnippetEnvironments
+            .Include(e => e.CodeType)
+            .Where(e =>
+                e.CodeTypeId == codeTypeId &&
+                e.LanguageVersion == requestEnvironment.LanguageVersion &&
+                e.Framework == requestEnvironment.Framework &&
+                e.FrameworkVersion == requestEnvironment.FrameworkVersion &&
+                e.RuntimeVersion == requestEnvironment.RuntimeVersion &&
+                e.StrictMode == requestEnvironment.StrictMode &&
+                e.PackageManager == requestEnvironment.PackageManager &&
+                e.TargetPlatform == requestEnvironment.TargetPlatform &&
+                e.OperatingSystem == requestEnvironment.OperatingSystem &&
+                e.BuildTool == requestEnvironment.BuildTool)
+            .ToListAsync(ct);
+
+        var environment = candidates.FirstOrDefault(e =>
+            e.KeyDependencies.SequenceEqual(keyDependencies) &&
+            DictionariesEqual(e.CustomMetadata, customMetadata));
+
+        if (environment is not null)
+        {
+            return environment;
+        }
+
+        environment = new SnippetEnvironment
+        {
+            CodeType = codeType,
+            CodeTypeId = codeType?.Id,
+            LanguageVersion = requestEnvironment.LanguageVersion,
+            Framework = requestEnvironment.Framework,
+            FrameworkVersion = requestEnvironment.FrameworkVersion,
+            RuntimeVersion = requestEnvironment.RuntimeVersion,
+            StrictMode = requestEnvironment.StrictMode,
+            PackageManager = requestEnvironment.PackageManager,
+            KeyDependencies = keyDependencies,
+            TargetPlatform = requestEnvironment.TargetPlatform,
+            OperatingSystem = requestEnvironment.OperatingSystem,
+            BuildTool = requestEnvironment.BuildTool,
+            CustomMetadata = customMetadata
+        };
+
+        db.SnippetEnvironments.Add(environment);
+        return environment;
+    }
+
+    private async Task<CodeType?> GetOrCreateCodeTypeAsync(string? language, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(language))
+        {
+            return null;
+        }
+
+        var normalizedLanguage = language.Trim();
+        var codeType = await db.CodeTypes.FirstOrDefaultAsync(c => c.Name == normalizedLanguage, ct);
+        if (codeType is not null)
+        {
+            return codeType;
+        }
+
+        codeType = new CodeType
+        {
+            Name = normalizedLanguage
+        };
+
+        db.CodeTypes.Add(codeType);
+        return codeType;
+    }
+
     private static string BuildEmbeddingText(Snippet snippet)
     {
         var parts = new List<string> { snippet.Prompt };
@@ -168,8 +239,8 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
             parts.Add($"Intent: {snippet.Intent}");
         if (!string.IsNullOrWhiteSpace(snippet.Constraints))
             parts.Add($"Constraints: {snippet.Constraints}");
-        if (snippet.Environment.Language is not null)
-            parts.Add($"Language: {snippet.Environment.Language}");
+        if (snippet.Environment.CodeType?.Name is not null)
+            parts.Add($"Language: {snippet.Environment.CodeType.Name}");
         if (snippet.Environment.Framework is not null)
             parts.Add($"Framework: {snippet.Environment.Framework}");
         return string.Join(". ", parts);
@@ -189,7 +260,7 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
         UpdatedAt = snippet.UpdatedAt,
         Environment = new SnippetEnvironmentDto
         {
-            Language = snippet.Environment.Language,
+            Language = snippet.Environment.CodeType?.Name,
             LanguageVersion = snippet.Environment.LanguageVersion,
             Framework = snippet.Environment.Framework,
             FrameworkVersion = snippet.Environment.FrameworkVersion,
@@ -203,6 +274,24 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
             CustomMetadata = snippet.Environment.CustomMetadata
         }
     };
+
+    private static bool DictionariesEqual(Dictionary<string, string> left, Dictionary<string, string> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        foreach (var (key, value) in left)
+        {
+            if (!right.TryGetValue(key, out var rightValue) || rightValue != value)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     /// <summary>Strips newline characters to prevent log-injection attacks.</summary>
     private static string SanitizeForLog(string? value) =>
