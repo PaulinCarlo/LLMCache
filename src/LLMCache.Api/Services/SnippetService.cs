@@ -158,6 +158,7 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
     private async Task<SnippetEnvironment> GetOrCreateEnvironmentAsync(SnippetEnvironmentDto requestEnvironment, CancellationToken ct)
     {
         var codeType = await GetOrCreateCodeTypeAsync(requestEnvironment.Language, ct);
+        var codeTypeId = codeType?.Id;
         var keyDependencies = requestEnvironment.KeyDependencies?.ToList() ?? [];
         var customMetadata = requestEnvironment.CustomMetadata is null
             ? new Dictionary<string, string>()
@@ -166,7 +167,7 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
         var candidates = await db.SnippetEnvironments
             .Include(e => e.CodeType)
             .Where(e =>
-                e.CodeTypeId == (codeType != null ? codeType.Id : null) &&
+                e.CodeTypeId == codeTypeId &&
                 e.LanguageVersion == requestEnvironment.LanguageVersion &&
                 e.Framework == requestEnvironment.Framework &&
                 e.FrameworkVersion == requestEnvironment.FrameworkVersion &&
