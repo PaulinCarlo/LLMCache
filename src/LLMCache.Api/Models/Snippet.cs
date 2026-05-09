@@ -23,7 +23,8 @@ public class Snippet
     [MaxLength(2000)]
     public string Constraints { get; set; } = string.Empty;
 
-    public SnippetEnvironment Environment { get; set; } = new();
+    public Guid EnvironmentId { get; set; }
+    public SnippetEnvironment Environment { get; set; } = null!;
 
     public List<string> Tags { get; set; } = [];
 
