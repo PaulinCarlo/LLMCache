@@ -3,19 +3,19 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using LLMCache.Api.DTOs;
+using LLMCache.Api.Models;
+using LLMCache.Api.Configuration;
 
 namespace LLMCache.Api.Services;
 
 public class DeltaService(
     ISnippetService snippetService,
     IHttpClientFactory httpClientFactory,
-    IConfiguration config,
+    ModelProviderConfig config,
     ILogger<DeltaService> logger) : IDeltaService
 {
     private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
-    private readonly string _apiKey = config["Delta:ApiKey"] ?? string.Empty;
-    private readonly string _model = config["Delta:Model"] ?? "gemini-1.5-flash";
-    private readonly string _provider = config["Delta:Provider"] ?? "google";
+    private readonly ModelProviderConfig _modelConfig = config;
     // Scores >= 60 indicate the cached snippet covers enough of the new prompt to be a "hit";
     // lower scores are "partial" matches that need more adaptation.
     private const int SimilarityThreshold = 60;
@@ -26,7 +26,7 @@ public class DeltaService(
 
         logger.LogDebug(
             "ComputeDelta started. HasCachedSnippetId={HasCachedSnippetId} Provider={Provider} Model={Model}",
-            request.CachedSnippetId.HasValue, _provider, _model);
+            request.CachedSnippetId.HasValue, _modelConfig.Provider, _modelConfig.Model);
 
         SnippetResponse? cached;
         double similarityScore;
@@ -84,10 +84,7 @@ public class DeltaService(
             CacheStatus = status,
             CachedSnippet = cached,
             ConfidenceScore = deltaAnalysis.ConfidenceScore,
-            DiffSummary = deltaAnalysis.DiffSummary,
-            AnnotatedPatch = deltaAnalysis.AnnotatedPatch,
             WhatChanges = deltaAnalysis.WhatChanges,
-            WhatRemains = deltaAnalysis.WhatRemains,
             ProcessingTimeMs = sw.ElapsedMilliseconds
         };
     }
@@ -97,7 +94,7 @@ public class DeltaService(
         SnippetResponse cached,
         CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(_apiKey))
+        if (string.IsNullOrEmpty(_modelConfig.ApiKey))
         {
             logger.LogWarning("No LLM API key for delta analysis, returning basic analysis");
             return BasicAnalysis(newPrompt, cached);
@@ -112,10 +109,7 @@ public class DeltaService(
             Respond ONLY with a valid JSON object in this exact structure:
             {
               "confidence_score": <integer 0-100>,
-              "diff_summary": "<one paragraph explaining what the cached code covers vs what's needed>",
-              "annotated_patch": "<unified diff format showing required changes>",
-              "what_changes": ["<change 1>", "<change 2>"],
-              "what_remains": ["<what still applies 1>", "<what still applies 2>"]
+              "what_changes": ["<change 1>", "<change 2>"]
             }
             """;
 
@@ -134,11 +128,11 @@ public class DeltaService(
 
         try
         {
-            var rawJson = _provider.ToLowerInvariant() switch
+            var rawJson = _modelConfig.Provider.ToLowerInvariant() switch
             {
                 "google" => await CallGoogleGeminiAsync(systemPrompt, userPrompt, ct),
                 "openai" => await CallOpenAiAsync(systemPrompt, userPrompt, ct),
-                _ => throw new InvalidOperationException($"Unknown LLM provider: {_provider}")
+                _ => throw new InvalidOperationException($"Unknown LLM provider: {_modelConfig.Provider}")
             };
 
             return ParseLlmResponse(rawJson) ?? BasicAnalysis(newPrompt, cached);
@@ -152,7 +146,7 @@ public class DeltaService(
 
     private async Task<string> CallGoogleGeminiAsync(string systemPrompt, string userPrompt, CancellationToken ct)
     {
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_model}:generateContent?key={_apiKey}";
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_modelConfig.Model}:generateContent?key={_modelConfig.ApiKey}";
         var request = new
         {
             system_instruction = new { parts = new[] { new { text = systemPrompt } } },
@@ -176,7 +170,7 @@ public class DeltaService(
     {
         var requestBody = new
         {
-            model = _model,
+            model = _modelConfig.Model,
             messages = new[]
             {
                 new { role = "system", content = systemPrompt },
@@ -187,7 +181,7 @@ public class DeltaService(
 
         using var message = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
         message.Headers.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _modelConfig.ApiKey);
         message.Content = JsonContent.Create(requestBody);
 
         var response = await _httpClient.SendAsync(message, ct);
@@ -210,13 +204,8 @@ public class DeltaService(
             return new LlmDeltaAnalysis
             {
                 ConfidenceScore = root.TryGetProperty("confidence_score", out var cs) ? cs.GetInt32() : 0,
-                DiffSummary = root.TryGetProperty("diff_summary", out var ds) ? ds.GetString() ?? "" : "",
-                AnnotatedPatch = root.TryGetProperty("annotated_patch", out var ap) ? ap.GetString() ?? "" : "",
                 WhatChanges = root.TryGetProperty("what_changes", out var wc)
                     ? wc.EnumerateArray().Select(e => e.GetString() ?? "").ToList()
-                    : [],
-                WhatRemains = root.TryGetProperty("what_remains", out var wr)
-                    ? wr.EnumerateArray().Select(e => e.GetString() ?? "").ToList()
                     : []
             };
         }
@@ -238,19 +227,13 @@ public class DeltaService(
         return new LlmDeltaAnalysis
         {
             ConfidenceScore = confidence,
-            DiffSummary = $"Basic similarity analysis (no LLM configured). Estimated {confidence}% overlap between prompts.",
-            AnnotatedPatch = "# LLM not configured - manual review required",
-            WhatChanges = ["Review and adapt the cached code to match new requirements"],
-            WhatRemains = ["Core logic structure may apply"]
+            WhatChanges = ["Review and adapt the cached code to match new requirements"]
         };
     }
 
     private sealed class LlmDeltaAnalysis
     {
         public int ConfidenceScore { get; set; }
-        public string DiffSummary { get; set; } = string.Empty;
-        public string AnnotatedPatch { get; set; } = string.Empty;
         public List<string> WhatChanges { get; set; } = [];
-        public List<string> WhatRemains { get; set; } = [];
     }
 }

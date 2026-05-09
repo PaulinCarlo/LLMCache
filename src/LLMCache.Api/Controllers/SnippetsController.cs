@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace LLMCache.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("[controller]")]
 [Produces("application/json")]
 public class SnippetsController(ISnippetService snippetService, ILogger<SnippetsController> logger) : ControllerBase
 {

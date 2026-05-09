@@ -11,7 +11,7 @@ using Microsoft.IdentityModel.Tokens;
 namespace LLMCache.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("[controller]")]
 [Produces("application/json")]
 public class AuthController(
     UserManager<ApplicationUser> userManager,

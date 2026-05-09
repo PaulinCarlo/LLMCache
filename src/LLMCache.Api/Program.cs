@@ -11,6 +11,7 @@ using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using LLMCache.Api.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -69,7 +70,6 @@ builder.Logging.AddOpenTelemetry(logging =>
     if (builder.Environment.IsDevelopment())
         logging.AddConsoleExporter();
 });
-
 // ──────────────────────────────────────────────────────────────
 // HTTP request logging
 // ──────────────────────────────────────────────────────────────
@@ -81,7 +81,6 @@ builder.Services.AddHttpLogging(logging =>
                           | HttpLoggingFields.ResponseStatusCode
                           | HttpLoggingFields.Duration;
 });
-
 // ──────────────────────────────────────────────────────────────
 // Database
 // ──────────────────────────────────────────────────────────────
@@ -140,11 +139,7 @@ var authenticationBuilder = builder.Services.AddAuthentication(options =>
         };
     });
 
-// ── SOCIAL LOGINS ──────────────────────────────────────────
-// Each provider is only registered when its ClientId is configured
-// in appsettings.json or user-secrets; empty credentials are skipped
-// to prevent OAuthOptions.Validate() from throwing on every request.
-// ──────────────────────────────────────────────────────────
+builder.Services.AddConfigurationSection<ModelProviderConfig>(builder.Configuration, "ModelProvider");
 
 if (!string.IsNullOrEmpty(builder.Configuration["Authentication:Google:ClientId"]) &&
     !string.IsNullOrEmpty(builder.Configuration["Authentication:Google:ClientSecret"]))
