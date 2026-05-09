@@ -49,16 +49,17 @@
       </div>
       <form class="modal-form" onsubmit="saveSnippet(event)">
         <div class="form-group">
+          <label>
+            <input type="checkbox" id="f-public"> Make snippet public
+          </label>
+        </div>
+        <div class="form-group">
           <label>Prompt <span class="required">*</span></label>
           <textarea id="f-prompt" placeholder="What did you ask the AI?" rows="3" required minlength="10" maxlength="2000"></textarea>
         </div>
         <div class="form-group">
           <label>Code <span class="required">*</span></label>
           <textarea id="f-code" placeholder="The code response / solution" rows="8" required class="code-textarea"></textarea>
-        </div>
-        <div class="form-group">
-          <label>Intent</label>
-          <input type="text" id="f-intent" placeholder="Why did you need this?" maxlength="1000">
         </div>
         <div class="form-group">
           <label>Constraints</label>
@@ -102,11 +103,6 @@
         <div class="form-group">
           <label>Tags</label>
           <input type="text" id="f-tags" placeholder="Comma-separated: react, hooks, state">
-        </div>
-        <div class="form-group">
-          <label>
-            <input type="checkbox" id="f-public"> Make snippet public
-          </label>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal()">Cancel</button>

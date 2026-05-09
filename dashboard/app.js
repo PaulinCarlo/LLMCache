@@ -204,7 +204,6 @@ async function saveSnippet(e) {
   const payload = {
     prompt: document.getElementById('f-prompt').value,
     code: document.getElementById('f-code').value,
-    intent: document.getElementById('f-intent').value,
     constraints: document.getElementById('f-constraints').value,
     tags,
     isPublic: document.getElementById('f-public').checked,
