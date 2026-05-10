@@ -184,6 +184,8 @@ builder.Services.AddAuthorization();
 // ──────────────────────────────────────────────────────────────
 builder.Services.AddHttpClient<IEmbeddingService, EmbeddingService>();
 builder.Services.AddHttpClient(); // registers IHttpClientFactory for DeltaService
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IUserInfoProfovider, UserInfoProfovider>();
 builder.Services.AddScoped<IDeltaService, DeltaService>();
 builder.Services.AddScoped<ISnippetService, SnippetService>();
 
@@ -272,4 +274,3 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
-

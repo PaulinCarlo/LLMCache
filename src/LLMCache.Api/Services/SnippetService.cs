@@ -7,12 +7,18 @@ using Pgvector.EntityFrameworkCore;
 
 namespace LLMCache.Api.Services;
 
-public class SnippetService(AppDbContext db, IEmbeddingService embeddingService, IConfiguration config, ILogger<SnippetService> logger) : ISnippetService
+public class SnippetService(
+    AppDbContext db,
+    IEmbeddingService embeddingService,
+    IConfiguration config,
+    ILogger<SnippetService> logger,
+    IUserInfoProfovider userInfoProfovider) : ISnippetService
 {
     private readonly string _embeddingModel = config["Embeddings:Model"] ?? "text-embedding-3-small";
 
-    public async Task<SnippetResponse> CreateSnippetAsync(CreateSnippetRequest request, Guid userId, CancellationToken ct = default)
+    public async Task<SnippetResponse> CreateSnippetAsync(CreateSnippetRequest request, CancellationToken ct = default)
     {
+        var userId = userInfoProfovider.GetUserInformation().UserId;
         var lineCount = request.Code.Split('\n', StringSplitOptions.None).Length;
         var environment = await GetOrCreateEnvironmentAsync(request.Environment, ct);
 
@@ -74,8 +80,9 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
         return snippet is null ? null : MapToResponse(snippet);
     }
 
-    public async Task<List<SnippetResponse>> GetUserSnippetsAsync(Guid userId, int page, int pageSize, CancellationToken ct = default)
+    public async Task<List<SnippetResponse>> GetUserSnippetsAsync(int page, int pageSize, CancellationToken ct = default)
     {
+        var userId = userInfoProfovider.GetUserInformation().UserId;
         logger.LogDebug("Listing snippets for user {UserId}. Page={Page} PageSize={PageSize}", userId, page, pageSize);
         var snippets = await db.Snippets
             .Include(s => s.Environment)
@@ -138,8 +145,9 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
         return filtered;
     }
 
-    public async Task<bool> DeleteSnippetAsync(Guid id, Guid userId, CancellationToken ct = default)
+    public async Task<bool> DeleteSnippetAsync(Guid id, CancellationToken ct = default)
     {
+        var userId = userInfoProfovider.GetUserInformation().UserId;
         logger.LogDebug("Deleting snippet {SnippetId} for user {UserId}", id, userId);
         var snippet = await db.Snippets.FirstOrDefaultAsync(s => s.Id == id && s.UserId == userId, ct);
         if (snippet is null)
