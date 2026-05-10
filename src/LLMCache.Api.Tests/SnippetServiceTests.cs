@@ -178,11 +178,7 @@ public class SnippetServiceTests
                 TargetPlatform = "node",
                 OperatingSystem = "linux",
                 BuildTool = "tsc",
-                CustomMetadata = new Dictionary<string, string>
-                {
-                    { "tsconfig", "strict" },
-                    { "moduleResolution", "bundler" }
-                }
+                CustomMetadata = ["tsconfig:strict", "moduleResolution:bundler"]
             }
         };
 
