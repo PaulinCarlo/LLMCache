@@ -22,7 +22,6 @@ namespace LLMCache.Api.Migrations
                 .HasAnnotation("ProductVersion", "10.0.7")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
-            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "hstore");
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
@@ -152,9 +151,6 @@ namespace LLMCache.Api.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
-                    b.Property<bool>("IsPublic")
-                        .HasColumnType("boolean");
-
                     b.Property<int>("LineCount")
                         .HasColumnType("integer");
 
@@ -173,15 +169,18 @@ namespace LLMCache.Api.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
+                    b.Property<long>("VisibilityArea")
+                        .HasColumnType("bigint");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("EnvironmentId");
 
-                    b.HasIndex("IsPublic");
-
                     b.HasIndex("UserId");
+
+                    b.HasIndex("VisibilityArea");
 
                     b.ToTable("Snippets");
                 });
@@ -195,16 +194,9 @@ namespace LLMCache.Api.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("Dimensions")
-                        .HasColumnType("integer");
-
                     b.Property<Vector>("EmbeddingVector")
                         .IsRequired()
                         .HasColumnType("vector(1536)");
-
-                    b.Property<string>("ModelName")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<Guid>("SnippetId")
                         .HasColumnType("uuid");
@@ -212,9 +204,10 @@ namespace LLMCache.Api.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("EmbeddingVector")
-                        .HasAnnotation("Npgsql:StorageParameter:lists", 100);
+                        .HasAnnotation("Npgsql:StorageParameter:ef_construction", 64)
+                        .HasAnnotation("Npgsql:StorageParameter:m", 16);
 
-                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("EmbeddingVector"), "ivfflat");
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("EmbeddingVector"), "hnsw");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("EmbeddingVector"), new[] { "vector_cosine_ops" });
 
                     b.HasIndex("SnippetId")
@@ -236,7 +229,7 @@ namespace LLMCache.Api.Migrations
                     b.Property<Guid?>("CodeTypeId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("CustomMetadata")
+                    b.Property<Dictionary<string, string>>("CustomMetadata")
                         .IsRequired()
                         .HasColumnType("jsonb");
 
@@ -248,7 +241,7 @@ namespace LLMCache.Api.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("KeyDependencies")
+                    b.PrimitiveCollection<string>("KeyDependencies")
                         .IsRequired()
                         .HasColumnType("jsonb");
 

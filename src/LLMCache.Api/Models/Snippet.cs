@@ -28,10 +28,10 @@ public class Snippet
 
     public List<string> Tags { get; set; } = [];
 
-    public bool IsPublic { get; set; } = false;
+    public long VisibilityArea { get; set; } = 0; // 0 = private, 1 = public, n = custom (bitmask for teams, orgs, etc.)
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-    public SnippetEmbedding? Embedding { get; set; }
+    public SnippetEmbedding? Embedding { get; set; } = null;
 }

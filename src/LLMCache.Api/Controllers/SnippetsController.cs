@@ -19,6 +19,8 @@ public class SnippetsController(ISnippetService snippetService, ILogger<Snippets
         [FromBody] CreateSnippetRequest request,
         CancellationToken ct)
     {
+        logger.LogInformation("CreateSnippet request received. ");
+
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
@@ -29,11 +31,7 @@ public class SnippetsController(ISnippetService snippetService, ILogger<Snippets
             return BadRequest(ModelState);
         }
 
-        logger.LogInformation(
-            "CreateSnippet request received. Language={Language} LineCount={LineCount} TagCount={TagCount}",
-            SanitizeForLog(request.Environment.Language),
-            lineCount,
-            request.Tags?.Count ?? 0);
+
 
         var userId = DefaultUserId;
         var result = await snippetService.CreateSnippetAsync(request, userId, ct);

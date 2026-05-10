@@ -9,13 +9,12 @@ using Pgvector;
 namespace LLMCache.Api.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class InitialIdentitySetup : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AlterDatabase()
-                .Annotation("Npgsql:PostgresExtension:hstore", ",,")
                 .Annotation("Npgsql:PostgresExtension:vector", ",,");
 
             migrationBuilder.CreateTable(
@@ -59,6 +58,18 @@ namespace LLMCache.Api.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AspNetUsers", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "CodeTypes",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CodeTypes", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -168,6 +179,35 @@ namespace LLMCache.Api.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "SnippetEnvironments",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    CodeTypeId = table.Column<Guid>(type: "uuid", nullable: true),
+                    LanguageVersion = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    Framework = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    FrameworkVersion = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    RuntimeVersion = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    StrictMode = table.Column<bool>(type: "boolean", nullable: true),
+                    PackageManager = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    KeyDependencies = table.Column<string>(type: "jsonb", nullable: false),
+                    TargetPlatform = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    OperatingSystem = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    BuildTool = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    CustomMetadata = table.Column<Dictionary<string, string>>(type: "jsonb", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SnippetEnvironments", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_SnippetEnvironments_CodeTypes_CodeTypeId",
+                        column: x => x.CodeTypeId,
+                        principalTable: "CodeTypes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Snippets",
                 columns: table => new
                 {
@@ -178,11 +218,11 @@ namespace LLMCache.Api.Migrations
                     LineCount = table.Column<int>(type: "integer", nullable: false),
                     Intent = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
                     Constraints = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
+                    EnvironmentId = table.Column<Guid>(type: "uuid", nullable: false),
                     Tags = table.Column<List<string>>(type: "text[]", nullable: false),
-                    IsPublic = table.Column<bool>(type: "boolean", nullable: false),
+                    VisibilityArea = table.Column<long>(type: "bigint", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    Environment = table.Column<string>(type: "jsonb", nullable: false)
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -193,6 +233,12 @@ namespace LLMCache.Api.Migrations
                         principalTable: "AspNetUsers",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Snippets_SnippetEnvironments_EnvironmentId",
+                        column: x => x.EnvironmentId,
+                        principalTable: "SnippetEnvironments",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -202,8 +248,6 @@ namespace LLMCache.Api.Migrations
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
                     SnippetId = table.Column<Guid>(type: "uuid", nullable: false),
                     EmbeddingVector = table.Column<Vector>(type: "vector(1536)", nullable: false),
-                    ModelName = table.Column<string>(type: "text", nullable: false),
-                    Dimensions = table.Column<int>(type: "integer", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
@@ -255,12 +299,19 @@ namespace LLMCache.Api.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_CodeTypes_Name",
+                table: "CodeTypes",
+                column: "Name",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_SnippetEmbeddings_EmbeddingVector",
                 table: "SnippetEmbeddings",
                 column: "EmbeddingVector")
-                .Annotation("Npgsql:IndexMethod", "ivfflat")
+                .Annotation("Npgsql:IndexMethod", "hnsw")
                 .Annotation("Npgsql:IndexOperators", new[] { "vector_cosine_ops" })
-                .Annotation("Npgsql:StorageParameter:lists", 100);
+                .Annotation("Npgsql:StorageParameter:ef_construction", 64)
+                .Annotation("Npgsql:StorageParameter:m", 16);
 
             migrationBuilder.CreateIndex(
                 name: "IX_SnippetEmbeddings_SnippetId",
@@ -269,19 +320,29 @@ namespace LLMCache.Api.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_SnippetEnvironments_CodeTypeId",
+                table: "SnippetEnvironments",
+                column: "CodeTypeId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Snippets_CreatedAt",
                 table: "Snippets",
                 column: "CreatedAt");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Snippets_IsPublic",
+                name: "IX_Snippets_EnvironmentId",
                 table: "Snippets",
-                column: "IsPublic");
+                column: "EnvironmentId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Snippets_UserId",
                 table: "Snippets",
                 column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Snippets_VisibilityArea",
+                table: "Snippets",
+                column: "VisibilityArea");
         }
 
         /// <inheritdoc />
@@ -313,6 +374,12 @@ namespace LLMCache.Api.Migrations
 
             migrationBuilder.DropTable(
                 name: "AspNetUsers");
+
+            migrationBuilder.DropTable(
+                name: "SnippetEnvironments");
+
+            migrationBuilder.DropTable(
+                name: "CodeTypes");
         }
     }
 }

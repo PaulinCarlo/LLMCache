@@ -9,7 +9,5 @@ public class SnippetEmbedding
     public Snippet? Snippet { get; set; }
 
     public Vector EmbeddingVector { get; set; } = null!;
-    public string ModelName { get; set; } = string.Empty;
-    public int Dimensions { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

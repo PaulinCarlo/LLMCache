@@ -39,5 +39,5 @@ public class SnippetEnvironmentDto
     public string? TargetPlatform { get; set; }
     public string? OperatingSystem { get; set; }
     public string? BuildTool { get; set; }
-    public Dictionary<string, string> CustomMetadata { get; set; } = [];
+    public List<string> CustomMetadata { get; set; } = [];
 }

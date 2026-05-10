@@ -31,7 +31,7 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
             Intent = string.Empty,
             Constraints = request.Constraints,
             Tags = request.Tags,
-            IsPublic = request.IsPublic,
+            VisibilityArea = request.IsPublic ? 1 : 0,
             Environment = environment,
             EnvironmentId = environment.Id
         };
@@ -46,9 +46,7 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
             var embedding = new SnippetEmbedding
             {
                 SnippetId = snippet.Id,
-                EmbeddingVector = new Vector(vector),
-                ModelName = _embeddingModel,
-                Dimensions = vector.Length
+                EmbeddingVector = new Vector(vector)
             };
             db.SnippetEmbeddings.Add(embedding);
             logger.LogDebug("Embedding generated for snippet {SnippetId}. Dimensions={Dimensions}", snippet.Id, vector.Length);
@@ -160,9 +158,7 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
         var codeType = await GetOrCreateCodeTypeAsync(requestEnvironment.Language, ct);
         var codeTypeId = codeType?.Id;
         var keyDependencies = requestEnvironment.KeyDependencies?.ToList() ?? [];
-        var customMetadata = requestEnvironment.CustomMetadata is null
-            ? new Dictionary<string, string>()
-            : new Dictionary<string, string>(requestEnvironment.CustomMetadata);
+        var customMetadata = requestEnvironment.CustomMetadata?.ToList() ?? [];
 
         var candidates = await db.SnippetEnvironments
             .Include(e => e.CodeType)
@@ -181,7 +177,7 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
 
         var environment = candidates.FirstOrDefault(e =>
             e.KeyDependencies.SequenceEqual(keyDependencies) &&
-            DictionariesEqual(e.CustomMetadata, customMetadata));
+            e.CustomMetadata.SequenceEqual(customMetadata));
 
         if (environment is not null)
         {
@@ -255,7 +251,7 @@ public class SnippetService(AppDbContext db, IEmbeddingService embeddingService,
         Intent = snippet.Intent,
         Constraints = snippet.Constraints,
         Tags = snippet.Tags,
-        IsPublic = snippet.IsPublic,
+        IsPublic = snippet.VisibilityArea == 1,
         CreatedAt = snippet.CreatedAt,
         UpdatedAt = snippet.UpdatedAt,
         Environment = new SnippetEnvironmentDto

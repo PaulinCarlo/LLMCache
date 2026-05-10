@@ -218,7 +218,7 @@ public class AuthController(
     /// </summary>
     private string ValidateReturnUrl(string? returnUrl)
     {
-        var frontendBase = configuration["FrontendUrl"] ?? "http://localhost:3000";
+        var frontendBase = configuration["FrontendUrl"] ?? "http://localhost:3001";
 
         if (string.IsNullOrEmpty(returnUrl))
             return $"{frontendBase}/login.html";
@@ -231,7 +231,7 @@ public class AuthController(
         // Exclude wildcard patterns (e.g. "chrome-extension://*") — they are valid for CORS
         // headers but cannot be used for safe redirect matching.
         var allowedOrigins = (configuration.GetSection("AllowedOrigins").Get<string[]>()
-                              ?? ["http://localhost:3000", "http://localhost:5173"])
+                              ?? ["http://localhost:3001", "http://localhost:5173"])
             .Where(o => !o.Contains('*'))
             .ToArray();
 

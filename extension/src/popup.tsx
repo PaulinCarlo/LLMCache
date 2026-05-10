@@ -26,8 +26,8 @@ interface AuthState {
   email?: string
 }
 
-const API_BASE = "http://localhost:3000"
-const WEBSITE_LOGIN_URL = "http://localhost:3000/login"
+const API_BASE = "http://localhost:3001"
+const WEBSITE_LOGIN_URL = "http://localhost:3001/login"
 
 export default function Popup() {
   const [snippets, setSnippets] = useState<Snippet[]>([])
@@ -144,7 +144,7 @@ export default function Popup() {
           </button>
         </div>
         <div className="popup-footer">
-          <a href="http://localhost:3000" target="_blank" rel="noreferrer">Open Dashboard →</a>
+          <a href="http://localhost:3001" target="_blank" rel="noreferrer">Open Dashboard →</a>
         </div>
       </div>
     )
@@ -246,7 +246,7 @@ export default function Popup() {
       )}
 
       <div className="popup-footer">
-        <a href="http://localhost:3000" target="_blank" rel="noreferrer">Open Dashboard →</a>
+        <a href="http://localhost:3001" target="_blank" rel="noreferrer">Open Dashboard →</a>
       </div>
     </div>
   )

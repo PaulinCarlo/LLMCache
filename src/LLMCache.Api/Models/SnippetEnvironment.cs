@@ -37,7 +37,7 @@ public class SnippetEnvironment
     [MaxLength(100)]
     public string? BuildTool { get; set; }
 
-    public Dictionary<string, string> CustomMetadata { get; set; } = [];
+    public List<string> CustomMetadata { get; set; } = [];
 
     public List<Snippet> Snippets { get; set; } = [];
 }
