@@ -216,7 +216,7 @@ async function saveSnippet(e) {
       targetPlatform: document.getElementById('f-platform').value || null,
       strictMode: document.getElementById('f-strict').checked || null,
       keyDependencies: [],
-      customMetadata: {}
+      customMetadata: []
     }
   }
 
