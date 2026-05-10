@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -200,6 +201,24 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Semantic caching layer for LLM prompts with delta analysis"
     });
     c.EnableAnnotations();
+
+    // JWT Bearer — shows the 🔓 Authorize button in Swagger UI
+    var bearerScheme = new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "Paste the JWT token returned by POST /auth/login or POST /auth/register."
+    };
+    c.AddSecurityDefinition("Bearer", bearerScheme);
+
+    c.AddSecurityRequirement(doc => new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecuritySchemeReference("Bearer", doc),
+            []
+        }
+    });
 });
 
 // ──────────────────────────────────────────────────────────────
