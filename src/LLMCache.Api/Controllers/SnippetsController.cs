@@ -1,16 +1,16 @@
 using LLMCache.Api.DTOs;
 using LLMCache.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LLMCache.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("[controller]")]
 [Produces("application/json")]
 public class SnippetsController(ISnippetService snippetService, ILogger<SnippetsController> logger) : ControllerBase
 {
-    private static readonly Guid DefaultUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-
     /// <summary>Creates a new cached snippet.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(SnippetResponse), StatusCodes.Status201Created)]
@@ -33,8 +33,7 @@ public class SnippetsController(ISnippetService snippetService, ILogger<Snippets
 
 
 
-        var userId = DefaultUserId;
-        var result = await snippetService.CreateSnippetAsync(request, userId, ct);
+        var result = await snippetService.CreateSnippetAsync(request, ct);
 
         logger.LogInformation("Snippet created. SnippetId={SnippetId}", result.Id);
 
@@ -66,9 +65,8 @@ public class SnippetsController(ISnippetService snippetService, ILogger<Snippets
         CancellationToken ct = default)
     {
         pageSize = Math.Clamp(pageSize, 1, 100);
-        var userId = DefaultUserId;
         logger.LogInformation("GetSnippets request received. Page={Page} PageSize={PageSize}", page, pageSize);
-        var results = await snippetService.GetUserSnippetsAsync(userId, page, pageSize, ct);
+        var results = await snippetService.GetUserSnippetsAsync(page, pageSize, ct);
         logger.LogInformation("GetSnippets returned {Count} snippets", results.Count);
         return Ok(results);
     }
@@ -108,8 +106,7 @@ public class SnippetsController(ISnippetService snippetService, ILogger<Snippets
     public async Task<IActionResult> DeleteSnippet(Guid id, CancellationToken ct)
     {
         logger.LogInformation("DeleteSnippet request received. SnippetId={SnippetId}", id);
-        var userId = DefaultUserId;
-        var deleted = await snippetService.DeleteSnippetAsync(id, userId, ct);
+        var deleted = await snippetService.DeleteSnippetAsync(id, ct);
         if (!deleted)
         {
             logger.LogWarning("DeleteSnippet — snippet not found or not owned by user. SnippetId={SnippetId}", id);
