@@ -27,7 +27,7 @@ interface AuthState {
 }
 
 const API_BASE = "http://localhost:3001"
-const WEBSITE_LOGIN_URL = "http://localhost:3001/login"
+const WEBSITE_LOGIN_URL = "http://localhost:3001/login.html"
 
 export default function Popup() {
   const [snippets, setSnippets] = useState<Snippet[]>([])
@@ -88,7 +88,8 @@ export default function Popup() {
   }
 
   const handleLogin = () => {
-    chrome.tabs.create({ url: WEBSITE_LOGIN_URL })
+    const loginUrl = `${WEBSITE_LOGIN_URL}?pc_extension_id=${encodeURIComponent(chrome.runtime.id)}`
+    chrome.tabs.create({ url: loginUrl })
   }
 
   const isLoggedIn = auth.token.trim().length > 0

@@ -1,4 +1,40 @@
 const API_BASE = ''
+const EXTENSION_ID_PARAM = 'pc_extension_id'
+const EXTENSION_ID_STORAGE_KEY = 'pc_extension_id'
+
+function getExtensionId() {
+  const fromQuery = new URLSearchParams(window.location.search).get(EXTENSION_ID_PARAM)
+  if (fromQuery) {
+    localStorage.setItem(EXTENSION_ID_STORAGE_KEY, fromQuery)
+    return fromQuery
+  }
+  return localStorage.getItem(EXTENSION_ID_STORAGE_KEY)
+}
+
+async function notifyExtension(message) {
+  const extensionId = getExtensionId()
+  if (!extensionId) return
+  if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return
+  try {
+    await chrome.runtime.sendMessage(extensionId, message)
+  } catch {
+    // Extension might be unavailable; keep dashboard login functional.
+  }
+}
+
+function syncExtensionLogin(tokenResponse) {
+  const token = tokenResponse?.accessToken || tokenResponse?.token
+  if (!token) return
+  void notifyExtension({
+    type: 'LOGIN_SUCCESS',
+    token,
+    email: tokenResponse?.email
+  })
+}
+
+function syncExtensionLogout() {
+  void notifyExtension({ type: 'LOGOUT' })
+}
 
 // ──────────────────────────────────────────────────────────
 // Token storage helpers
@@ -9,6 +45,7 @@ function saveToken(tokenResponse) {
   localStorage.setItem('pc_user_email', tokenResponse.email)
   localStorage.setItem('pc_display_name', tokenResponse.displayName)
   localStorage.setItem('pc_user_id', tokenResponse.userId)
+  syncExtensionLogin(tokenResponse)
 }
 
 function getToken() {
@@ -20,6 +57,7 @@ function clearToken() {
   localStorage.removeItem('pc_user_email')
   localStorage.removeItem('pc_display_name')
   localStorage.removeItem('pc_user_id')
+  syncExtensionLogout()
 }
 
 // ──────────────────────────────────────────────────────────
@@ -141,7 +179,11 @@ async function handleRegister(e) {
 // ──────────────────────────────────────────────────────────
 
 function socialLogin(provider) {
-  const returnUrl = encodeURIComponent(window.location.origin + '/dashboard/login.html')
+  const extensionId = getExtensionId()
+  const returnPath = extensionId
+    ? `/login.html?${EXTENSION_ID_PARAM}=${encodeURIComponent(extensionId)}`
+    : '/login.html'
+  const returnUrl = encodeURIComponent(window.location.origin + returnPath)
   window.location.href = `${API_BASE}/api/auth/external-login?provider=${provider}&returnUrl=${returnUrl}`
 }
 
@@ -153,7 +195,7 @@ function handleOAuthCallback() {
 
   if (token) {
     // Minimal token response — social login only returns the access token in the URL
-    localStorage.setItem('pc_access_token', token)
+    saveToken({ accessToken: token })
     // Remove the token from the URL so it is not bookmarked / shared
     history.replaceState({}, '', window.location.pathname)
     window.location.href = 'index.html'
@@ -189,6 +231,7 @@ function extractErrors(data) {
 // ──────────────────────────────────────────────────────────
 
 ;(function init() {
+  getExtensionId()
   if (handleOAuthCallback()) return
   if (getToken()) {
     window.location.href = 'index.html'
