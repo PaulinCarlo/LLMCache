@@ -22,6 +22,7 @@ chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) =>
   if (message?.type === "LOGOUT") {
     chrome.storage.local.remove("auth")
     sendResponse({ success: true })
+    return
   }
 })
 
