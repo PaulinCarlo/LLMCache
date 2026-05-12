@@ -2,6 +2,7 @@ const API_BASE = ''
 let allSnippets = []
 let currentSnippet = null
 let activeFilter = ''
+const EXTENSION_ID_STORAGE_KEY = 'pc_extension_id'
 
 // ──────────────────────────────────────────────────────────
 // Auth helpers
@@ -17,6 +18,16 @@ function authHeaders() {
 }
 
 function logout() {
+  const extensionId = localStorage.getItem(EXTENSION_ID_STORAGE_KEY)
+  if (extensionId && typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+    try {
+      chrome.runtime.sendMessage(extensionId, { type: 'LOGOUT' }, () => {
+        void chrome.runtime.lastError
+      })
+    } catch {
+      // ignore; dashboard logout should still succeed
+    }
+  }
   localStorage.removeItem('pc_access_token')
   localStorage.removeItem('pc_user_email')
   localStorage.removeItem('pc_display_name')
