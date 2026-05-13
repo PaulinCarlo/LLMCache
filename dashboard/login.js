@@ -18,7 +18,10 @@ async function notifyExtension(message) {
   try {
     await new Promise((resolve) => {
       chrome.runtime.sendMessage(extensionId, message, () => {
-        void chrome.runtime.lastError
+        const runtimeError = chrome.runtime.lastError
+        if (runtimeError) {
+          console.debug('Extension auth sync skipped:', runtimeError.message)
+        }
         resolve()
       })
     })
