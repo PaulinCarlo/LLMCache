@@ -16,7 +16,12 @@ async function notifyExtension(message) {
   if (!extensionId) return
   if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return
   try {
-    await chrome.runtime.sendMessage(extensionId, message)
+    await new Promise((resolve) => {
+      chrome.runtime.sendMessage(extensionId, message, () => {
+        void chrome.runtime.lastError
+        resolve()
+      })
+    })
   } catch {
     // Extension might be unavailable; keep dashboard login functional.
   }

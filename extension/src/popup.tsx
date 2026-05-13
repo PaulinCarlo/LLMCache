@@ -60,7 +60,8 @@ export default function Popup() {
 
   const fetchSnippets = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/snippets?pageSize=50`)
+      const headers = auth.token ? { Authorization: `Bearer ${auth.token}` } : {}
+      const res = await fetch(`${API_BASE}/api/snippets?pageSize=50`, { headers })
       if (res.ok) setSnippets(await res.json())
     } catch { /* backend not running */ }
   }
