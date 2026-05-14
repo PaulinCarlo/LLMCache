@@ -16,7 +16,24 @@ async function notifyExtension(message) {
   if (!extensionId) return
   if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) return
   try {
-    await chrome.runtime.sendMessage(extensionId, message)
+    await new Promise((resolve) => {
+      let settled = false
+      const timeoutId = setTimeout(() => {
+        if (settled) return
+        settled = true
+        resolve()
+      }, 1000)
+      chrome.runtime.sendMessage(extensionId, message, () => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeoutId)
+        const runtimeError = chrome.runtime.lastError
+        if (runtimeError) {
+          console.debug('Extension auth sync skipped:', runtimeError.message)
+        }
+        resolve()
+      })
+    })
   } catch {
     // Extension might be unavailable; keep dashboard login functional.
   }
