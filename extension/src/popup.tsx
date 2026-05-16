@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { sendToBackground } from "@plasmohq/messaging"
 import "./styles/popup.css"
 
@@ -8,17 +8,34 @@ interface Snippet {
   code: string
   lineCount: number
   createdAt: string
-  environment: {
+  intent?: string
+  constraints?: string
+  isPublic?: boolean
+  environment?: {
     language?: string
     framework?: string
+    runtimeVersion?: string
+    buildTool?: string
+    packageManager?: string
+    targetPlatform?: string
+    strictMode?: boolean
   }
-  tags: string[]
+  tags?: string[]
 }
 
 interface SaveForm {
   prompt: string
   code: string
+  constraints: string
+  tags: string
+  isPublic: boolean
+  language: string
   framework: string
+  runtimeVersion: string
+  buildTool: string
+  packageManager: string
+  targetPlatform: string
+  strictMode: boolean
 }
 
 interface AuthState {
@@ -26,19 +43,36 @@ interface AuthState {
   email?: string
 }
 
-const API_BASE = "http://localhost:3001"
 const WEBSITE_LOGIN_URL = "http://localhost:3001/login.html"
+
+const EMPTY_FORM: SaveForm = {
+  prompt: "",
+  code: "",
+  constraints: "",
+  tags: "",
+  isPublic: false,
+  language: "",
+  framework: "",
+  runtimeVersion: "",
+  buildTool: "",
+  packageManager: "",
+  targetPlatform: "",
+  strictMode: false
+}
 
 export default function Popup() {
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [tab, setTab] = useState<"browse" | "save">("browse")
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState<SaveForm>({ prompt: "", code: "", framework: "" })
+  const [form, setForm] = useState<SaveForm>(EMPTY_FORM)
   const [saveMsg, setSaveMsg] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [autoCheck, setAutoCheck] = useState(false)
   const [auth, setAuth] = useState<AuthState>({ token: "" })
   const [checking, setChecking] = useState(false)
+  const [activeFilter, setActiveFilter] = useState("")
+  const [loadingBrowse, setLoadingBrowse] = useState(false)
+  const [browseError, setBrowseError] = useState("")
 
   useEffect(() => {
     chrome.storage.local.get(["autoCheck", "auth"], (result) => {
@@ -46,7 +80,6 @@ export default function Popup() {
       if (result.auth) setAuth(result.auth as AuthState)
     })
 
-    // Update auth instantly when the background receives a LOGIN_SUCCESS handshake
     const onStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }) => {
       if (changes.auth) setAuth((changes.auth.newValue ?? { token: "" }) as AuthState)
     }
@@ -54,17 +87,43 @@ export default function Popup() {
     return () => chrome.storage.onChanged.removeListener(onStorageChange)
   }, [])
 
-  useEffect(() => {
-    if (auth.token) fetchSnippets()
-  }, [auth.token])
+  const fetchSnippets = async (query = "") => {
+    if (!auth.token.trim()) return
+    setLoadingBrowse(true)
+    setBrowseError("")
 
-  const fetchSnippets = async () => {
     try {
-      const headers = auth.token ? { Authorization: `Bearer ${auth.token}` } : {}
-      const res = await fetch(`${API_BASE}/api/snippets?pageSize=50`, { headers })
-      if (res.ok) setSnippets(await res.json())
-    } catch { /* backend not running */ }
+      const resp = await sendToBackground<any, any>({
+        name: "index",
+        body: {
+          type: "LIST_SNIPPETS",
+          payload: { query }
+        }
+      })
+
+      if (!resp?.success) {
+        setBrowseError(resp?.error || "Failed to load snippets")
+        setSnippets([])
+        return
+      }
+
+      setSnippets(Array.isArray(resp.snippets) ? resp.snippets : [])
+    } catch {
+      setBrowseError("Backend not connected")
+      setSnippets([])
+    } finally {
+      setLoadingBrowse(false)
+    }
   }
+
+  useEffect(() => {
+    if (!auth.token.trim()) return
+    const handle = setTimeout(() => {
+      void fetchSnippets(searchQuery.trim())
+    }, 250)
+
+    return () => clearTimeout(handle)
+  }, [auth.token, searchQuery])
 
   const handleAutoCheckToggle = () => {
     const next = !autoCheck
@@ -79,7 +138,9 @@ export default function Popup() {
       if (activeTab?.id) {
         await chrome.tabs.sendMessage(activeTab.id, { type: "CHECK_PROMPT" })
       }
-    } catch { /* content script not available on this page */ }
+    } catch {
+      // content script not available on this page
+    }
     setChecking(false)
   }
 
@@ -96,7 +157,12 @@ export default function Popup() {
   const isLoggedIn = auth.token.trim().length > 0
 
   const handleSave = async () => {
-    if (!form.prompt || !form.code) return
+    if (!form.prompt.trim() || !form.code.trim()) return
+
+    const tags = form.tags
+      ? form.tags.split(",").map((t) => t.trim()).filter(Boolean)
+      : []
+
     setSaving(true)
     const resp = await sendToBackground({
       name: "index",
@@ -105,28 +171,46 @@ export default function Popup() {
         payload: {
           prompt: form.prompt,
           code: form.code,
-          environment: { framework: form.framework || undefined },
-          constraints: "",
-          tags: []
+          constraints: form.constraints,
+          tags,
+          isPublic: form.isPublic,
+          environment: {
+            language: form.language || null,
+            framework: form.framework || null,
+            runtimeVersion: form.runtimeVersion || null,
+            buildTool: form.buildTool || null,
+            packageManager: form.packageManager || null,
+            targetPlatform: form.targetPlatform || null,
+            strictMode: form.strictMode || null,
+            keyDependencies: [],
+            customMetadata: []
+          }
         }
       }
     })
     setSaving(false)
+
     if (resp?.success) {
       setSaveMsg("✓ Snippet saved!")
-      setForm({ prompt: "", code: "", framework: "" })
-      fetchSnippets()
+      setForm(EMPTY_FORM)
+      setTab("browse")
+      void fetchSnippets("")
       setTimeout(() => setSaveMsg(""), 2500)
+      return
     }
+
+    setSaveMsg(`✗ Save failed${resp?.status ? ` (HTTP ${resp.status})` : ""}`)
+    setTimeout(() => setSaveMsg(""), 3000)
   }
 
-  const filtered = searchQuery
-    ? snippets.filter(s =>
-        s.prompt.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.environment?.language?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.tags?.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
-    : snippets
+  const languages = useMemo(() => {
+    return Array.from(new Set(snippets.map((s) => s.environment?.language).filter(Boolean) as string[])).slice(0, 6)
+  }, [snippets])
+
+  const filtered = useMemo(() => {
+    if (!activeFilter) return snippets
+    return snippets.filter((s) => s.environment?.language === activeFilter)
+  }, [activeFilter, snippets])
 
   if (!isLoggedIn) {
     return (
@@ -169,8 +253,7 @@ export default function Popup() {
         <button
           className={`toggle-btn ${autoCheck ? "on" : ""}`}
           onClick={handleAutoCheckToggle}
-          title="When on, cache is checked before every send"
-        >
+          title="When on, cache is checked before every send">
           <span className="toggle-track">
             <span className="toggle-knob" />
           </span>
@@ -180,8 +263,7 @@ export default function Popup() {
           className="check-btn"
           onClick={handleCheckForPrompt}
           disabled={checking}
-          title="Check the current prompt against the cache"
-        >
+          title="Check the current prompt against the cache">
           {checking ? "…" : "Check ⚡"}
         </button>
       </div>
@@ -196,24 +278,47 @@ export default function Popup() {
       </div>
 
       {tab === "browse" && (
-        <div>
+        <div className="browse-pane">
           <input
             className="popup-search"
-            placeholder="Search snippets…"
+            placeholder="Search snippets by prompt, language, tag…"
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
+
+          <div className="filter-bar">
+            <button className={`filter-btn ${!activeFilter ? "active" : ""}`} onClick={() => setActiveFilter("")}>All</button>
+            {languages.map((language) => (
+              <button
+                key={language}
+                className={`filter-btn ${activeFilter === language ? "active" : ""}`}
+                onClick={() => setActiveFilter(language)}>
+                {language}
+              </button>
+            ))}
+          </div>
+
           <div className="snippet-list">
-            {filtered.length === 0 && (
-              <div className="empty">No snippets yet. Save your first one!</div>
+            {loadingBrowse && <div className="empty">Loading snippets…</div>}
+            {!loadingBrowse && browseError && <div className="empty">{browseError}</div>}
+            {!loadingBrowse && !browseError && filtered.length === 0 && (
+              <div className="empty">No snippets found. Save your first snippet using + Save.</div>
             )}
-            {filtered.map(s => (
+            {!loadingBrowse && !browseError && filtered.map((s) => (
               <div key={s.id} className="snippet-card">
                 <div className="snippet-prompt">{s.prompt}</div>
+                {s.intent && <div className="snippet-intent">{s.intent}</div>}
                 <div className="snippet-meta">
                   {s.environment?.language && <span className="tag">{s.environment.language}</span>}
                   {s.environment?.framework && <span className="tag">{s.environment.framework}</span>}
                   <span className="tag lines">{s.lineCount} lines</span>
+                  {s.environment?.strictMode && <span className="tag strict">strict</span>}
+                  {s.isPublic && <span className="tag">public</span>}
+                </div>
+                <pre className="snippet-code">{s.code}</pre>
+                <div className="snippet-footer">
+                  <span>{new Date(s.createdAt).toLocaleDateString()}</span>
+                  <span>{s.tags?.slice(0, 3).join(", ")}</span>
                 </div>
               </div>
             ))}
@@ -223,24 +328,99 @@ export default function Popup() {
 
       {tab === "save" && (
         <div className="save-form">
-          <textarea
-            placeholder="Prompt (what did you ask the AI?)"
-            value={form.prompt}
-            onChange={e => setForm(f => ({ ...f, prompt: e.target.value }))}
-            rows={3}
-          />
-          <textarea
-            placeholder="Code (the response / solution)"
-            value={form.code}
-            onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
-            rows={5}
-          />
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={form.isPublic}
+              onChange={(e) => setForm((f) => ({ ...f, isPublic: e.target.checked }))}
+            />
+            Make snippet public
+          </label>
+
+          <div className="form-group">
+            <label>Prompt</label>
+            <textarea
+              placeholder="What did you ask the AI?"
+              value={form.prompt}
+              onChange={(e) => setForm((f) => ({ ...f, prompt: e.target.value }))}
+              rows={3}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Code</label>
+            <textarea
+              placeholder="The code response / solution"
+              value={form.code}
+              onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
+              rows={6}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Constraints</label>
+            <input
+              placeholder="Any requirements or limitations?"
+              value={form.constraints}
+              onChange={(e) => setForm((f) => ({ ...f, constraints: e.target.value }))}
+            />
+          </div>
+
+          <div className="row">
+            <input
+              placeholder="Language"
+              value={form.language}
+              onChange={(e) => setForm((f) => ({ ...f, language: e.target.value }))}
+            />
+            <input
+              placeholder="Framework"
+              value={form.framework}
+              onChange={(e) => setForm((f) => ({ ...f, framework: e.target.value }))}
+            />
+          </div>
+
+          <div className="row">
+            <input
+              placeholder="Runtime Version"
+              value={form.runtimeVersion}
+              onChange={(e) => setForm((f) => ({ ...f, runtimeVersion: e.target.value }))}
+            />
+            <input
+              placeholder="Build Tool"
+              value={form.buildTool}
+              onChange={(e) => setForm((f) => ({ ...f, buildTool: e.target.value }))}
+            />
+          </div>
+
+          <div className="row">
+            <input
+              placeholder="Package Manager"
+              value={form.packageManager}
+              onChange={(e) => setForm((f) => ({ ...f, packageManager: e.target.value }))}
+            />
+            <input
+              placeholder="Target Platform"
+              value={form.targetPlatform}
+              onChange={(e) => setForm((f) => ({ ...f, targetPlatform: e.target.value }))}
+            />
+          </div>
+
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={form.strictMode}
+              onChange={(e) => setForm((f) => ({ ...f, strictMode: e.target.checked }))}
+            />
+            Strict Mode
+          </label>
+
           <input
-            placeholder="Framework (e.g. React) — optional"
-            value={form.framework}
-            onChange={e => setForm(f => ({ ...f, framework: e.target.value }))}
+            placeholder="Tags (comma-separated): react, hooks, state"
+            value={form.tags}
+            onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
           />
-          <button className="save-btn" onClick={handleSave} disabled={saving || !form.prompt || !form.code}>
+
+          <button className="save-btn" onClick={handleSave} disabled={saving || !form.prompt.trim() || !form.code.trim()}>
             {saving ? "Saving…" : "Save Snippet"}
           </button>
           {saveMsg && <div className="save-msg">{saveMsg}</div>}

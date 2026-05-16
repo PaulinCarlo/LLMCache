@@ -1,9 +1,7 @@
 import type { PlasmoMessaging } from "@plasmohq/messaging"
+import "../../../shared/backend-api.js"
 
 const API_BASE = "http://localhost:3001"
-const DEBOUNCE_MS = 500
-
-let debounceTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
 /**
  * External message listener – receives LOGIN_SUCCESS from the website
@@ -40,63 +38,68 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   })
 }
 
+const apiClient = (globalThis as any).PromptCacheApi.createClient({
+  baseUrl: API_BASE,
+  getAuthHeaders
+})
+
 export const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
-  const { type, payload, tabId } = req.body
+  const { type, payload } = req.body
 
   if (type === "SEARCH") {
-    const tid = tabId ?? 0
-    const existing = debounceTimers.get(tid)
-    if (existing) clearTimeout(existing)
-
-    const timer = setTimeout(async () => {
-      debounceTimers.delete(tid)
-      try {
-        const headers = await getAuthHeaders()
-        const response = await fetch(
-          `${API_BASE}/api/snippets/search?prompt=${encodeURIComponent(payload.prompt)}&topK=3&minSimilarity=0.65`,
-          { headers }
-        )
-        if (!response.ok) {
-          res.send({ success: false, error: `HTTP ${response.status}` })
-          return
-        }
-        const data = await response.json()
-        res.send({ success: true, results: data })
-      } catch (err) {
-        res.send({ success: false, error: String(err) })
+    try {
+      const result = await apiClient.searchSnippets({
+        prompt: payload.prompt,
+        topK: 3,
+        minSimilarity: 0.65
+      })
+      if (!result.ok) {
+        res.send({ success: false, error: `HTTP ${result.status}` })
+        return
       }
-    }, DEBOUNCE_MS)
+      res.send({ success: true, results: result.results })
+    } catch (err) {
+      res.send({ success: false, error: String(err) })
+    }
+    return
+  }
 
-    debounceTimers.set(tid, timer)
+  if (type === "LIST_SNIPPETS") {
+    try {
+      const result = await apiClient.listSnippets({
+        query: payload?.query ?? "",
+        pageSize: 100,
+        topK: 20,
+        minSimilarity: 0.3
+      })
+      if (!result.ok) {
+        res.send({ success: false, error: `HTTP ${result.status}` })
+        return
+      }
+      res.send({ success: true, snippets: result.snippets })
+    } catch (err) {
+      res.send({ success: false, error: String(err) })
+    }
+    return
   }
 
   if (type === "DELTA") {
     try {
-      const headers = await getAuthHeaders()
-      const response = await fetch(`${API_BASE}/api/delta`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...headers },
-        body: JSON.stringify({ newPrompt: payload.prompt })
-      })
-      const data = await response.json()
-      res.send({ success: true, delta: data })
+      const result = await apiClient.computeDelta({ newPrompt: payload.prompt })
+      res.send({ success: result.ok, delta: result.data, status: result.status })
     } catch (err) {
       res.send({ success: false, error: String(err) })
     }
+    return
   }
 
   if (type === "SAVE") {
     try {
-      const headers = await getAuthHeaders()
-      const response = await fetch(`${API_BASE}/api/snippets`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...headers },
-        body: JSON.stringify(payload)
-      })
-      const data = await response.json()
-      res.send({ success: response.ok, snippet: data })
+      const result = await apiClient.createSnippet(payload)
+      res.send({ success: result.ok, snippet: result.data, status: result.status })
     } catch (err) {
       res.send({ success: false, error: String(err) })
     }
+    return
   }
 }

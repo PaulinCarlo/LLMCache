@@ -3,6 +3,10 @@ let allSnippets = []
 let currentSnippet = null
 let activeFilter = ''
 const EXTENSION_ID_STORAGE_KEY = 'pc_extension_id'
+const apiClient = window.PromptCacheApi.createClient({
+  baseUrl: API_BASE,
+  getAuthHeaders: async () => authHeaders()
+})
 
 // ──────────────────────────────────────────────────────────
 // Auth helpers
@@ -57,13 +61,9 @@ async function fetchSnippets(query = '') {
   const grid = document.getElementById('snippets-grid')
   grid.innerHTML = '<div class="loading">Loading snippets…</div>'
   try {
-    const url = query
-      ? `${API_BASE}/api/snippets/search?prompt=${encodeURIComponent(query)}&topK=20&minSimilarity=0.3`
-      : `${API_BASE}/api/snippets?pageSize=100`
-    const res = await fetch(url, { headers: authHeaders() })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
-    allSnippets = data[0]?.snippet ? data.map(d => d.snippet) : data
+    const result = await apiClient.listSnippets({ query, pageSize: 100, topK: 20, minSimilarity: 0.3 })
+    if (!result.ok) throw new Error(`HTTP ${result.status}`)
+    allSnippets = result.snippets
     renderSnippets(allSnippets)
     updateStats()
   } catch (e) {
@@ -156,12 +156,9 @@ async function submitDelta() {
   resultDiv.innerHTML = '<div class="loading">Computing delta…</div>'
 
   try {
-    const res = await fetch(`${API_BASE}/api/delta`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ newPrompt, cachedSnippetId: currentSnippet.id })
-    })
-    const delta = await res.json()
+    const result = await apiClient.computeDelta({ newPrompt, cachedSnippetId: currentSnippet.id })
+    if (!result.ok) throw new Error(`HTTP ${result.status}`)
+    const delta = result.data
     const statusClass = `status-${delta.cacheStatus}`
     resultDiv.innerHTML = `
       <div class="delta-card">
@@ -184,8 +181,8 @@ async function deleteSnippet() {
   if (!currentSnippet) return
   if (!confirm(`Delete "${currentSnippet.prompt.slice(0, 60)}…"?`)) return
   try {
-    const res = await fetch(`${API_BASE}/api/snippets/${currentSnippet.id}`, { method: 'DELETE', headers: authHeaders() })
-    if (res.ok) {
+    const result = await apiClient.deleteSnippet(currentSnippet.id)
+    if (result.ok) {
       closeDetail()
       fetchSnippets()
     }
@@ -232,12 +229,8 @@ async function saveSnippet(e) {
   }
 
   try {
-    const res = await fetch(`${API_BASE}/api/snippets`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify(payload)
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const result = await apiClient.createSnippet(payload)
+    if (!result.ok) throw new Error(`HTTP ${result.status}`)
     closeModal()
     e.target.reset()
     fetchSnippets()
