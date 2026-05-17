@@ -141,6 +141,7 @@ var authenticationBuilder = builder.Services.AddAuthentication(options =>
     });
 
 builder.Services.AddConfigurationSection<ModelProviderConfig>(builder.Configuration, "ModelProvider");
+builder.Services.AddConfigurationSection<EmbeddingsConfig>(builder.Configuration, "Embeddings");
 
 if (!string.IsNullOrEmpty(builder.Configuration["Authentication:Google:ClientId"]) &&
     !string.IsNullOrEmpty(builder.Configuration["Authentication:Google:ClientSecret"]))
