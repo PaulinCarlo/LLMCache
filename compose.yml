@@ -18,10 +18,10 @@ services:
   api:
     profiles: ["services"]
     build:
-      context: ./src/LLMCache.Api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./src/LLMCache.Api/Dockerfile
     ports:
-      - "5001:8080"
+      - "3001:3001"
     environment:
       ConnectionStrings__DefaultConnection: "Host=db;Database=promptcache;Username=postgres;Password=postgres"
       Embeddings__Provider: "openai"
@@ -31,20 +31,12 @@ services:
       Delta__Model: "gemini-1.5-flash"
       Delta__ApiKey: "${GOOGLE_API_KEY:-}"
       AllowedOrigins__0: "http://localhost:3001"
-      AllowedOrigins__1: "http://localhost:5001"
+      AllowedOrigins__1: "chrome-extension://*"
+      FrontendUrl: "http://localhost:3001"
       ASPNETCORE_ENVIRONMENT: "Production"
     depends_on:
       db:
         condition: service_healthy
-
-  dashboard:
-    image: nginx:alpine
-    ports:
-      - "3001:80"
-    volumes:
-      - ./dashboard:/usr/share/nginx/html:ro
-      - ./shared:/usr/share/nginx/shared:ro
-      - ./dashboard/nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
   # 1. Loki: The log database
   loki:

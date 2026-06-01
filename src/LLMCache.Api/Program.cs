@@ -225,7 +225,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ──────────────────────────────────────────────────────────────
-// CORS for browser extension and dashboard
+// CORS for browser extension and monolith UI
 // ──────────────────────────────────────────────────────────────
 builder.Services.AddCors(options =>
 {
@@ -263,15 +263,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "PromptCache API v1");
-        c.RoutePrefix = string.Empty;
+        c.RoutePrefix = "swagger";
     });
 }
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseCors();
 app.UseHttpLogging();
-app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapFallbackToFile("index.html");
 
 app.Run();
