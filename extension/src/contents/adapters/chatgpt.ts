@@ -1,8 +1,18 @@
 import type { ChatAdapter } from "./types"
 
 // ChatGPT uses a contenteditable div (#prompt-textarea) in the current UI
-const INPUT_SEL = "#prompt-textarea"
-const SEND_SEL = 'button[data-testid="send-button"]'
+const INPUT_SEL = [
+  "#prompt-textarea",
+  'textarea[data-testid="prompt-textarea"]',
+  'div[contenteditable="true"][data-testid="prompt-textarea"]'
+].join(", ")
+
+const SEND_SEL = [
+  'button[data-testid="send-button"]',
+  'button[aria-label="Send prompt"]',
+  'button[aria-label*="Send message" i]',
+  'button[aria-label*="Send" i][type="submit"]'
+].join(", ")
 
 function setInputText(el: Element, text: string): void {
   if ((el as HTMLElement).isContentEditable) {

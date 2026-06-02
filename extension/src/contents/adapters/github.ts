@@ -4,12 +4,15 @@ import type { ChatAdapter } from "./types"
 const INPUT_SEL = [
   "#copilot-chat-textarea",
   'textarea[data-testid="copilot-chat-input"]',
+  'textarea[data-testid="chat-input-textarea"]',
+  'div[contenteditable="true"][data-testid="copilot-chat-input"]',
   'textarea[placeholder*="Ask Copilot" i]',
   'textarea[name="userMessage"]'
 ].join(", ")
 
 const SEND_SEL = [
   'button[data-testid="copilot-chat-submit"]',
+  'button[data-testid="chat-input-send-button"]',
   'button[aria-label*="Send" i][type="submit"]',
   'button[aria-label="Submit"]',
   "form.copilot-chat button[type='submit']"
@@ -28,17 +31,29 @@ function setTextareaValue(el: HTMLTextAreaElement, text: string): void {
 export class GithubAdapter implements ChatAdapter {
   readonly name = "GitHub Copilot"
 
-  private getInput(): HTMLTextAreaElement | null {
-    return document.querySelector(INPUT_SEL)
+  private getInput(): HTMLElement | null {
+    return document.querySelector<HTMLElement>(INPUT_SEL)
   }
 
   getPromptText(): string {
-    return this.getInput()?.value ?? ""
+    const input = this.getInput()
+    if (!input) return ""
+    if (input instanceof HTMLTextAreaElement) return input.value ?? ""
+    return input.innerText ?? ""
   }
 
   setPromptText(text: string): void {
     const el = this.getInput()
-    if (el) setTextareaValue(el, text)
+    if (!el) return
+    if (el instanceof HTMLTextAreaElement) {
+      setTextareaValue(el, text)
+      return
+    }
+    if (el.isContentEditable) {
+      el.focus()
+      document.execCommand("selectAll", false)
+      document.execCommand("insertText", false, text)
+    }
   }
 
   interceptSend(handler: (prompt: string) => Promise<boolean>): () => void {

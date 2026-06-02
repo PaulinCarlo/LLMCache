@@ -31,7 +31,8 @@ services:
       Delta__Model: "gemini-1.5-flash"
       Delta__ApiKey: "${GOOGLE_API_KEY:-}"
       AllowedOrigins__0: "http://localhost:3001"
-      AllowedOrigins__1: "chrome-extension://*"
+      AllowedOrigins__1: "http://127.0.0.1:3001"
+      AllowedOrigins__2: "https://localhost:7029"
       FrontendUrl: "http://localhost:3001"
       ASPNETCORE_ENVIRONMENT: "Production"
     depends_on:

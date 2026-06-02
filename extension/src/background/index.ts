@@ -1,7 +1,12 @@
 import type { PlasmoMessaging } from "@plasmohq/messaging"
 import "../../../shared/backend-api.js"
-
-const API_BASE = "http://localhost:3001"
+import {
+  DEFAULT_API_BASE_URL,
+  readStoredApiBaseUrl,
+  resolveApiBaseUrl,
+  getCandidateApiBaseUrls,
+  writeStoredApiBaseUrl
+} from "../backend-config"
 
 /**
  * External message listener – receives LOGIN_SUCCESS from the website
@@ -38,21 +43,86 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   })
 }
 
-const apiClient = (globalThis as any).PromptCacheApi.createClient({
-  baseUrl: API_BASE,
-  getAuthHeaders
-})
+function createApiClient(baseUrl: string) {
+  return (globalThis as any).PromptCacheApi.createClient({
+    baseUrl,
+    getAuthHeaders,
+    timeoutMs: 3500
+  })
+}
+
+function isConnectionError(error: unknown): boolean {
+  const text = String(error || "").toLowerCase()
+  return (
+    text.includes("failed to fetch") ||
+    text.includes("networkerror") ||
+    text.includes("load failed") ||
+    text.includes("connection failed") ||
+    text.includes("the user aborted a request") ||
+    text.includes("signal is aborted") ||
+    text.includes("network request failed")
+  )
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error("Connection failed")), timeoutMs)
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timeoutId)
+        reject(error)
+      }
+    )
+  })
+}
+
+async function callApi<T>(request: (apiClient: any) => Promise<T>): Promise<T> {
+  const preferredBaseUrl = await readStoredApiBaseUrl()
+  const resolvedBaseUrl = await resolveApiBaseUrl(preferredBaseUrl)
+  let lastError: unknown = null
+
+  for (const baseUrl of getCandidateApiBaseUrls(resolvedBaseUrl)) {
+    try {
+      const result = await withTimeout(request(createApiClient(baseUrl)), 4500)
+      await writeStoredApiBaseUrl(baseUrl)
+      return result
+    } catch (error) {
+      lastError = error
+      if (!isConnectionError(error)) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError ?? new Error(`Connection failed for ${resolvedBaseUrl || DEFAULT_API_BASE_URL}`)
+}
 
 export const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
   const { type, payload } = req.body
 
+  if (type === "GET_API_BASE") {
+    try {
+      const baseUrl = await resolveApiBaseUrl(await readStoredApiBaseUrl())
+      res.send({ success: true, baseUrl })
+    } catch (err) {
+      res.send({ success: false, error: String(err) })
+    }
+    return
+  }
+
   if (type === "SEARCH") {
     try {
-      const result = await apiClient.searchSnippets({
-        prompt: payload.prompt,
-        topK: 3,
-        minSimilarity: 0.65
-      })
+      const result = await callApi((apiClient) =>
+        apiClient.searchSnippets({
+          prompt: payload.prompt,
+          topK: 3,
+          minSimilarity: 0.65
+        })
+      )
       if (!result.ok) {
         res.send({ success: false, error: `HTTP ${result.status}` })
         return
@@ -66,12 +136,14 @@ export const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
 
   if (type === "LIST_SNIPPETS") {
     try {
-      const result = await apiClient.listSnippets({
-        query: payload?.query ?? "",
-        pageSize: 100,
-        topK: 20,
-        minSimilarity: 0.3
-      })
+      const result = await callApi((apiClient) =>
+        apiClient.listSnippets({
+          query: payload?.query ?? "",
+          pageSize: 100,
+          topK: 20,
+          minSimilarity: 0.3
+        })
+      )
       if (!result.ok) {
         res.send({ success: false, error: `HTTP ${result.status}` })
         return
@@ -85,7 +157,9 @@ export const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
 
   if (type === "DELTA") {
     try {
-      const result = await apiClient.computeDelta({ newPrompt: payload.prompt })
+      const result = await callApi((apiClient) =>
+        apiClient.computeDelta({ newPrompt: payload.prompt })
+      )
       res.send({ success: result.ok, delta: result.data, status: result.status })
     } catch (err) {
       res.send({ success: false, error: String(err) })
@@ -95,7 +169,7 @@ export const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
 
   if (type === "SAVE") {
     try {
-      const result = await apiClient.createSnippet(payload)
+      const result = await callApi((apiClient) => apiClient.createSnippet(payload))
       res.send({ success: result.ok, snippet: result.data, status: result.status })
     } catch (err) {
       res.send({ success: false, error: String(err) })

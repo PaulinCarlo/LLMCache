@@ -1,7 +1,18 @@
-const API_BASE = ''
 const EXTENSION_ID_PARAM = 'pc_extension_id'
 const EXTENSION_ID_STORAGE_KEY = 'pc_extension_id'
-const apiClient = window.PromptCacheApi.createClient({ baseUrl: API_BASE })
+let currentApiBase = ''
+let apiClientPromise = null
+
+async function getApiClient() {
+  if (!apiClientPromise) {
+    apiClientPromise = window.PromptCacheBackend.resolveApiBaseUrl(currentApiBase).then((baseUrl) => {
+      currentApiBase = baseUrl
+      return window.PromptCacheApi.createClient({ baseUrl })
+    })
+  }
+
+  return apiClientPromise
+}
 
 function getExtensionId() {
   const fromQuery = new URLSearchParams(window.location.search).get(EXTENSION_ID_PARAM)
@@ -122,6 +133,7 @@ async function handleLogin(e) {
   const password = document.getElementById('login-password').value
 
   try {
+    const apiClient = await getApiClient()
     const result = await apiClient.login({ email, password })
     const data = result.data
     if (!result.ok) {
@@ -156,6 +168,7 @@ async function handleRegister(e) {
   const password = document.getElementById('reg-password').value
 
   try {
+    const apiClient = await getApiClient()
     const result = await apiClient.register({ email, password, displayName })
     const data = result.data
     if (!result.ok) {
@@ -184,12 +197,13 @@ async function handleRegister(e) {
 // Social / OAuth login
 // ──────────────────────────────────────────────────────────
 
-function socialLogin(provider) {
+async function socialLogin(provider) {
   const extensionId = getExtensionId()
   const returnPath = extensionId
     ? `/login.html?${EXTENSION_ID_PARAM}=${encodeURIComponent(extensionId)}`
     : '/login.html'
   const returnUrl = window.location.origin + returnPath
+  const apiClient = await getApiClient()
   window.location.href = apiClient.buildExternalLoginUrl(provider, returnUrl)
 }
 

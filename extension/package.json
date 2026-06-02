@@ -5,6 +5,10 @@
   "description": "Semantic caching layer for LLM prompts in your browser",
   "private": true,
   "scripts": {
+    "sync:backend-config": "node scripts/sync-backend-config.mjs",
+    "predev": "npm run sync:backend-config",
+    "prebuild": "npm run sync:backend-config",
+    "prepackage": "npm run sync:backend-config",
     "dev": "plasmo dev",
     "build": "plasmo build",
     "package": "plasmo package"
@@ -25,11 +29,15 @@
   "manifest": {
     "host_permissions": [
       "http://localhost:3001/*",
+      "http://127.0.0.1:3001/*",
+      "https://localhost:7029/*",
       "https://chat.openai.com/*",
       "https://chatgpt.com/*",
       "https://claude.ai/*",
       "https://gemini.google.com/*",
-      "https://github.com/*"
+      "https://bard.google.com/*",
+      "https://github.com/*",
+      "https://copilot.github.com/*"
     ],
     "permissions": [
       "storage",
@@ -39,7 +47,8 @@
     "externally_connectable": {
       "matches": [
         "http://localhost:3001/*",
-        "http://127.0.0.1:3001/*"
+        "http://127.0.0.1:3001/*",
+        "https://localhost:7029/*"
       ]
     }
   }

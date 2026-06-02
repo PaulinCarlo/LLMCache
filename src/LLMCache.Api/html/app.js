@@ -1,12 +1,23 @@
-const API_BASE = ''
 let allSnippets = []
 let currentSnippet = null
 let activeFilter = ''
 const EXTENSION_ID_STORAGE_KEY = 'pc_extension_id'
-const apiClient = window.PromptCacheApi.createClient({
-  baseUrl: API_BASE,
-  getAuthHeaders: async () => authHeaders()
-})
+let currentApiBase = ''
+let apiClientPromise = null
+
+async function getApiClient() {
+  if (!apiClientPromise) {
+    apiClientPromise = window.PromptCacheBackend.resolveApiBaseUrl(currentApiBase).then((baseUrl) => {
+      currentApiBase = baseUrl
+      return window.PromptCacheApi.createClient({
+        baseUrl,
+        getAuthHeaders: async () => authHeaders()
+      })
+    })
+  }
+
+  return apiClientPromise
+}
 
 // ──────────────────────────────────────────────────────────
 // Auth helpers
@@ -61,13 +72,20 @@ async function fetchSnippets(query = '') {
   const grid = document.getElementById('snippets-grid')
   grid.innerHTML = '<div class="loading">Loading snippets…</div>'
   try {
+    const apiClient = await getApiClient()
     const result = await apiClient.listSnippets({ query, pageSize: 100, topK: 20, minSimilarity: 0.3 })
+    if (result.status === 401) {
+      logout()
+      return
+    }
     if (!result.ok) throw new Error(`HTTP ${result.status}`)
     allSnippets = result.snippets
     renderSnippets(allSnippets)
     updateStats()
   } catch (e) {
-    grid.innerHTML = `<div class="empty-state"><h3>Backend not connected</h3><p>Start the API at ${API_BASE} to view snippets.</p></div>`
+    const candidates = window.PromptCacheBackend.getCandidateBaseUrls(currentApiBase)
+    const backendHint = candidates.length ? candidates.join(', ') : 'http://localhost:3001'
+    grid.innerHTML = `<div class="empty-state"><h3>Backend not connected</h3><p>Start the API and make sure the dashboard can reach one of: ${escHtml(backendHint)}</p></div>`
   }
 }
 
@@ -156,7 +174,12 @@ async function submitDelta() {
   resultDiv.innerHTML = '<div class="loading">Computing delta…</div>'
 
   try {
+    const apiClient = await getApiClient()
     const result = await apiClient.computeDelta({ newPrompt, cachedSnippetId: currentSnippet.id })
+    if (result.status === 401) {
+      logout()
+      return
+    }
     if (!result.ok) throw new Error(`HTTP ${result.status}`)
     const delta = result.data
     const statusClass = `status-${delta.cacheStatus}`
@@ -181,7 +204,12 @@ async function deleteSnippet() {
   if (!currentSnippet) return
   if (!confirm(`Delete "${currentSnippet.prompt.slice(0, 60)}…"?`)) return
   try {
+    const apiClient = await getApiClient()
     const result = await apiClient.deleteSnippet(currentSnippet.id)
+    if (result.status === 401) {
+      logout()
+      return
+    }
     if (result.ok) {
       closeDetail()
       fetchSnippets()
@@ -229,7 +257,12 @@ async function saveSnippet(e) {
   }
 
   try {
+    const apiClient = await getApiClient()
     const result = await apiClient.createSnippet(payload)
+    if (result.status === 401) {
+      logout()
+      return
+    }
     if (!result.ok) throw new Error(`HTTP ${result.status}`)
     closeModal()
     e.target.reset()

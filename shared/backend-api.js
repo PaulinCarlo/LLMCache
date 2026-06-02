@@ -20,6 +20,10 @@
     return contentType.includes("application/json")
   }
 
+  function isAbortControllerAvailable() {
+    return typeof AbortController !== "undefined"
+  }
+
   function normalizeSnippetList(data) {
     if (Array.isArray(data)) {
       if (data.length > 0 && data[0] && typeof data[0] === "object" && "snippet" in data[0]) {
@@ -40,21 +44,30 @@
     const headers = { ...toObject(opts.headers), ...authHeaders }
     const hasBody = opts.body !== undefined
     if (hasBody) headers["Content-Type"] = "application/json"
+    const timeoutMs = typeof opts.timeoutMs === "number" ? opts.timeoutMs : client.timeoutMs
+    const controller = isAbortControllerAvailable() && timeoutMs ? new AbortController() : null
+    const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null
 
-    const response = await fetch(`${client.baseUrl}${path}`, {
-      method,
-      headers,
-      body: hasBody ? JSON.stringify(opts.body) : undefined
-    })
+    try {
+      const response = await fetch(`${client.baseUrl}${path}`, {
+        method,
+        headers,
+        body: hasBody ? JSON.stringify(opts.body) : undefined,
+        signal: controller?.signal
+      })
 
-    const data = hasJsonResponse(response) ? await response.json() : null
-    return { ok: response.ok, status: response.status, data }
+      const data = hasJsonResponse(response) ? await response.json() : null
+      return { ok: response.ok, status: response.status, data }
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId)
+    }
   }
 
   function createClient(config) {
     const client = {
       baseUrl: config?.baseUrl || "",
-      getAuthHeaders: config?.getAuthHeaders
+      getAuthHeaders: config?.getAuthHeaders,
+      timeoutMs: config?.timeoutMs
     }
 
     return {

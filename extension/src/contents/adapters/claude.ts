@@ -3,14 +3,17 @@ import type { ChatAdapter } from "./types"
 // Claude uses a ProseMirror-based contenteditable editor
 const INPUT_SEL = [
   'div[contenteditable="true"].ProseMirror',
+  'div.ProseMirror[contenteditable="true"]',
   'div[contenteditable="true"][data-placeholder]',
+  'div[contenteditable="true"][role="textbox"]',
   'div[contenteditable="true"]'
 ].join(", ")
 
 const SEND_SEL = [
   'button[aria-label="Send Message"]',
   'button[aria-label="Send"]',
-  'button[data-testid="send-button"]'
+  'button[data-testid="send-button"]',
+  'button[type="submit"][aria-label*="Send" i]'
 ].join(", ")
 
 function setContentEditable(el: HTMLElement, text: string): void {

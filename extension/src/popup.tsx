@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
 import { sendToBackground } from "@plasmohq/messaging"
 import "./styles/popup.css"
+import {
+  DEFAULT_API_BASE_URL,
+  buildDashboardUrl,
+  buildLoginUrl
+} from "./backend-config"
 
 interface Snippet {
   id: string
@@ -43,8 +48,6 @@ interface AuthState {
   email?: string
 }
 
-const WEBSITE_LOGIN_URL = "http://localhost:3001/login.html"
-
 const EMPTY_FORM: SaveForm = {
   prompt: "",
   code: "",
@@ -60,19 +63,103 @@ const EMPTY_FORM: SaveForm = {
   strictMode: false
 }
 
+const PROMPT_CHECK_RETRY_DELAYS_MS = [0, 200, 500]
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isPromptCheckConnectionError(error: unknown): boolean {
+  const text = String(error || "").toLowerCase()
+  return (
+    text.includes("receiving end does not exist") ||
+    text.includes("could not establish connection")
+  )
+}
+
+function isSupportedPromptCheckUrl(url?: string): boolean {
+  if (!url) return false
+
+  try {
+    const { hostname, pathname } = new URL(url)
+    const host = hostname.toLowerCase()
+    const path = pathname.toLowerCase()
+
+    return (
+      host === "chatgpt.com" ||
+      host === "chat.openai.com" ||
+      host === "claude.ai" ||
+      host === "gemini.google.com" ||
+      host === "bard.google.com" ||
+      host === "copilot.github.com" ||
+      host === "github.com" ||
+      (host === "www.bing.com" && path.startsWith("/chat"))
+    )
+  } catch {
+    return false
+  }
+}
+
+async function sendPromptCheck(tabId: number): Promise<any> {
+  let lastError: unknown = null
+
+  for (const delayMs of PROMPT_CHECK_RETRY_DELAYS_MS) {
+    if (delayMs > 0) {
+      await wait(delayMs)
+    }
+
+    try {
+      return await chrome.tabs.sendMessage(tabId, { type: "CHECK_PROMPT" })
+    } catch (error) {
+      lastError = error
+      if (!isPromptCheckConnectionError(error)) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError ?? new Error("Prompt check is still loading on this page.")
+}
+
+function describeExtensionError(error: unknown, fallback: string): string {
+  const raw = String(error || "").trim()
+  const lower = raw.toLowerCase()
+
+  if (!raw) return fallback
+  if (lower.includes("connection failed")) return "PromptCache API is not reachable. Start the backend and retry."
+  if (lower.includes("http 401")) return "Authentication expired. Sign in again from the popup."
+  if (lower.includes("http 403")) return "Access denied for this action."
+  if (lower.includes("http 404")) return "PromptCache endpoint not found."
+  if (lower.includes("http 5")) return "PromptCache backend error. Please retry."
+  if (lower.includes("not logged in")) return "Sign in from the popup before checking prompts."
+  if (lower.includes("no prompt found")) return "No prompt found on this page. Type a prompt first."
+  if (
+    lower.includes("receiving end does not exist") ||
+    lower.includes("could not establish connection")
+  ) {
+    return "Prompt check is still loading on this page. Wait a moment and retry."
+  }
+
+  return `${fallback}: ${raw}`
+}
+
 export default function Popup() {
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [tab, setTab] = useState<"browse" | "save">("browse")
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<SaveForm>(EMPTY_FORM)
   const [saveMsg, setSaveMsg] = useState("")
+  const [saveMsgType, setSaveMsgType] = useState<"success" | "error">("success")
   const [searchQuery, setSearchQuery] = useState("")
   const [autoCheck, setAutoCheck] = useState(false)
   const [auth, setAuth] = useState<AuthState>({ token: "" })
   const [checking, setChecking] = useState(false)
+  const [checkMsg, setCheckMsg] = useState("")
+  const [checkMsgType, setCheckMsgType] = useState<"success" | "error">("success")
   const [activeFilter, setActiveFilter] = useState("")
   const [loadingBrowse, setLoadingBrowse] = useState(false)
   const [browseError, setBrowseError] = useState("")
+  const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL)
 
   useEffect(() => {
     chrome.storage.local.get(["autoCheck", "auth"], (result) => {
@@ -85,6 +172,29 @@ export default function Popup() {
     }
     chrome.storage.onChanged.addListener(onStorageChange)
     return () => chrome.storage.onChanged.removeListener(onStorageChange)
+  }, [])
+
+  const refreshApiBaseUrl = async () => {
+    try {
+      const response = await sendToBackground<any, { success?: boolean; baseUrl?: string }>({
+        name: "index",
+        body: { type: "GET_API_BASE" }
+      })
+
+      if (response?.success && response.baseUrl) {
+        setApiBaseUrl(response.baseUrl)
+        return response.baseUrl
+      }
+    } catch {
+      setApiBaseUrl(DEFAULT_API_BASE_URL)
+      return DEFAULT_API_BASE_URL
+    }
+
+    return DEFAULT_API_BASE_URL
+  }
+
+  useEffect(() => {
+    void refreshApiBaseUrl()
   }, [])
 
   const fetchSnippets = async (query = "") => {
@@ -102,14 +212,14 @@ export default function Popup() {
       })
 
       if (!resp?.success) {
-        setBrowseError(resp?.error || "Failed to load snippets")
+        setBrowseError(describeExtensionError(resp?.error, "Failed to load snippets"))
         setSnippets([])
         return
       }
 
       setSnippets(Array.isArray(resp.snippets) ? resp.snippets : [])
-    } catch {
-      setBrowseError("Backend not connected")
+    } catch (err) {
+      setBrowseError(describeExtensionError(err, "Failed to load snippets"))
       setSnippets([])
     } finally {
       setLoadingBrowse(false)
@@ -133,15 +243,34 @@ export default function Popup() {
 
   const handleCheckForPrompt = async () => {
     setChecking(true)
+    setCheckMsg("")
     try {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
-      if (activeTab?.id) {
-        await chrome.tabs.sendMessage(activeTab.id, { type: "CHECK_PROMPT" })
+      if (!activeTab?.id) {
+        setCheckMsgType("error")
+        setCheckMsg("No active tab found for prompt check.")
+      } else if (!isSupportedPromptCheckUrl(activeTab.url)) {
+        setCheckMsgType("error")
+        setCheckMsg("Prompt check works only on supported AI chat pages.")
+      } else {
+        const response = await sendPromptCheck(activeTab.id)
+        if (!response?.success) {
+          setCheckMsgType("error")
+          setCheckMsg(describeExtensionError(response?.error, "Prompt check failed"))
+        } else if (response.hit) {
+          setCheckMsgType("success")
+          setCheckMsg("Cache hit found. See overlay in the chat page.")
+        } else {
+          setCheckMsgType("success")
+          setCheckMsg("No cache match for the current prompt.")
+        }
       }
-    } catch {
-      // content script not available on this page
+    } catch (err) {
+      setCheckMsgType("error")
+      setCheckMsg(describeExtensionError(err, "Prompt check failed"))
     }
     setChecking(false)
+    setTimeout(() => setCheckMsg(""), 3500)
   }
 
   const handleLogout = () => {
@@ -149,8 +278,9 @@ export default function Popup() {
     chrome.storage.local.remove("auth")
   }
 
-  const handleLogin = () => {
-    const loginUrl = `${WEBSITE_LOGIN_URL}?pc_extension_id=${encodeURIComponent(chrome.runtime.id)}`
+  const handleLogin = async () => {
+    const baseUrl = await refreshApiBaseUrl()
+    const loginUrl = `${buildLoginUrl(baseUrl)}?pc_extension_id=${encodeURIComponent(chrome.runtime.id)}`
     chrome.tabs.create({ url: loginUrl })
   }
 
@@ -191,6 +321,7 @@ export default function Popup() {
     setSaving(false)
 
     if (resp?.success) {
+      setSaveMsgType("success")
       setSaveMsg("✓ Snippet saved!")
       setForm(EMPTY_FORM)
       setTab("browse")
@@ -199,7 +330,8 @@ export default function Popup() {
       return
     }
 
-    setSaveMsg(`✗ Save failed${resp?.status ? ` (HTTP ${resp.status})` : ""}`)
+    setSaveMsgType("error")
+    setSaveMsg(`✗ ${describeExtensionError(resp?.error || (resp?.status ? `HTTP ${resp.status}` : ""), "Save failed")}`)
     setTimeout(() => setSaveMsg(""), 3000)
   }
 
@@ -230,7 +362,7 @@ export default function Popup() {
           </button>
         </div>
         <div className="popup-footer">
-          <a href="http://localhost:3001" target="_blank" rel="noreferrer">Open Dashboard →</a>
+          <a href={buildDashboardUrl(apiBaseUrl)} target="_blank" rel="noreferrer">Open Dashboard →</a>
         </div>
       </div>
     )
@@ -267,6 +399,11 @@ export default function Popup() {
           {checking ? "…" : "Check ⚡"}
         </button>
       </div>
+      {checkMsg && (
+        <div className={`check-msg ${checkMsgType === "error" ? "error" : ""}`}>
+          {checkMsg}
+        </div>
+      )}
 
       <div className="popup-tabs">
         <button className={`tab ${tab === "browse" ? "active" : ""}`} onClick={() => setTab("browse")}>
@@ -423,12 +560,12 @@ export default function Popup() {
           <button className="save-btn" onClick={handleSave} disabled={saving || !form.prompt.trim() || !form.code.trim()}>
             {saving ? "Saving…" : "Save Snippet"}
           </button>
-          {saveMsg && <div className="save-msg">{saveMsg}</div>}
+          {saveMsg && <div className={`save-msg ${saveMsgType === "error" ? "error" : ""}`}>{saveMsg}</div>}
         </div>
       )}
 
       <div className="popup-footer">
-        <a href="http://localhost:3001" target="_blank" rel="noreferrer">Open Dashboard →</a>
+        <a href={buildDashboardUrl(apiBaseUrl)} target="_blank" rel="noreferrer">Open Dashboard →</a>
       </div>
     </div>
   )

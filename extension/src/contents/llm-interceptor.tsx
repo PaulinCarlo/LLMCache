@@ -12,7 +12,8 @@ export const config: PlasmoCSConfig = {
     "https://gemini.google.com/*",
     "https://bard.google.com/*",
     "https://www.bing.com/chat*",
-    "https://github.com/*"
+    "https://github.com/*",
+    "https://copilot.github.com/*"
   ],
   all_frames: false
 }
@@ -55,6 +56,11 @@ interface DeltaResult {
   whatRemains: string[]
 }
 
+interface FeedbackError {
+  title: string
+  detail: string
+}
+
 async function searchCache(prompt: string) {
   return sendToBackground<any, any>({
     name: "index",
@@ -69,6 +75,72 @@ async function searchCacheWithTimeout(prompt: string, timeoutMs = 5000) {
     setTimeout(() => resolve({ success: false, error: CONNECTION_FAILED }), timeoutMs)
   )
   return Promise.race([searchCache(prompt), timeout])
+}
+
+function buildErrorFeedback(error: unknown, action: string): FeedbackError {
+  const raw = String(error || "").trim()
+  const lower = raw.toLowerCase()
+
+  if (!raw) {
+    return {
+      title: `${action} failed`,
+      detail: "Unexpected extension error. Please try again."
+    }
+  }
+
+  if (lower.includes(CONNECTION_FAILED)) {
+    return {
+      title: "Connection failed",
+      detail: "PromptCache API is not reachable. Start the backend and try again."
+    }
+  }
+
+  if (lower.includes("http 401")) {
+    return {
+      title: "Authentication required",
+      detail: "Your session expired. Sign in again from the PromptCache popup."
+    }
+  }
+
+  if (lower.includes("http 403")) {
+    return {
+      title: "Access denied",
+      detail: "Your account is not allowed to perform this action."
+    }
+  }
+
+  if (lower.includes("http 404")) {
+    return {
+      title: "Service not found",
+      detail: "PromptCache endpoint not found. Verify backend URL and route setup."
+    }
+  }
+
+  if (lower.includes("http 5")) {
+    return {
+      title: "Server error",
+      detail: "PromptCache backend failed to process this request. Try again shortly."
+    }
+  }
+
+  if (lower.includes("no prompt found")) {
+    return {
+      title: "No prompt detected",
+      detail: "Type a prompt first, then run cache check again."
+    }
+  }
+
+  if (lower.includes("not logged in")) {
+    return {
+      title: "Not logged in",
+      detail: "Sign in from the PromptCache popup to enable cache checks."
+    }
+  }
+
+  return {
+    title: `${action} failed`,
+    detail: raw
+  }
 }
 
 function CacheWidget({
@@ -174,7 +246,7 @@ function PromptCacheOverlay() {
   const [results, setResults] = useState<SearchResult[] | null>(null)
   const [delta, setDelta] = useState<DeltaResult | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<FeedbackError | null>(null)
   const adapterRef = useRef<ChatAdapter | null>(null)
   const autoCheckRef = useRef(false)
   const isLoggedInRef = useRef(false)
@@ -226,8 +298,8 @@ function PromptCacheOverlay() {
           setIsLoading(true)
           const resp = await searchCacheWithTimeout(prompt)
           setIsLoading(false)
-          if (resp?.error === CONNECTION_FAILED) {
-            setError("Connection failed")
+          if (resp?.error) {
+            setError(buildErrorFeedback(resp.error, "Cache check"))
             return true // unblock send on timeout
           }
           if (
@@ -257,8 +329,8 @@ function PromptCacheOverlay() {
               setIsLoading(true)
               const resp = await searchCacheWithTimeout(text)
               setIsLoading(false)
-              if (resp?.error === CONNECTION_FAILED) {
-                setError("Connection failed")
+              if (resp?.error) {
+                setError(buildErrorFeedback(resp.error, "Cache check"))
                 return
               }
               if (
@@ -322,9 +394,9 @@ function PromptCacheOverlay() {
       setIsLoading(true)
       searchCacheWithTimeout(prompt).then((resp) => {
         setIsLoading(false)
-        if (resp?.error === CONNECTION_FAILED) {
-          setError("Connection failed")
-          sendResponse({ success: false, error: CONNECTION_FAILED })
+        if (resp?.error) {
+          setError(buildErrorFeedback(resp.error, "Cache check"))
+          sendResponse({ success: false, error: resp.error })
           return
         }
         if (
@@ -356,6 +428,8 @@ function PromptCacheOverlay() {
     if (resp?.success) {
       setDelta(resp.delta)
       setResults(null)
+    } else {
+      setError(buildErrorFeedback(resp?.error, "Delta analysis"))
     }
   }
 
@@ -378,8 +452,11 @@ function PromptCacheOverlay() {
         <div className="pc-widget pc-error">
           <div className="pc-header">
             <span className="pc-icon">⚠</span>
-            <span className="pc-title">{error}</span>
+            <span className="pc-title">{error.title}</span>
             <button className="pc-close" onClick={() => setError(null)} aria-label="Dismiss">✕</button>
+          </div>
+          <div className="pc-body">
+            <p className="pc-error-detail">{error.detail}</p>
           </div>
         </div>
       )}
