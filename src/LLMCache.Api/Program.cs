@@ -235,8 +235,12 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(
-                builder.Configuration.GetSection("AllowedOrigins").Get<string[]>() ?? ["http://localhost:3001", "http://localhost:5173"])
+        var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>()
+            ?? ["http://localhost:3001", "http://localhost:5173"];
+
+        policy.SetIsOriginAllowed(origin =>
+                allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase) ||
+                origin.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase))
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
