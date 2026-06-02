@@ -71,9 +71,6 @@ builder.Logging.AddOpenTelemetry(logging =>
 
     if (!string.IsNullOrEmpty(otelEndpoint))
         logging.AddOtlpExporter(opts => opts.Endpoint = new Uri(otelEndpoint));
-
-    if (builder.Environment.IsDevelopment())
-        logging.AddConsoleExporter();
 });
 // ──────────────────────────────────────────────────────────────
 // HTTP request logging
