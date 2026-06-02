@@ -15,6 +15,7 @@ using OpenTelemetry.Trace;
 using LLMCache.Api.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseWebRoot("html");
 
 // ──────────────────────────────────────────────────────────────
 // OpenTelemetry — traces, metrics, logs
