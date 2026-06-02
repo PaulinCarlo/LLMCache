@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
 import { sendToBackground } from "@plasmohq/messaging"
 import "./styles/popup.css"
+import {
+  DEFAULT_API_BASE_URL,
+  buildDashboardUrl,
+  buildLoginUrl
+} from "./backend-config"
 
 interface Snippet {
   id: string
@@ -42,8 +47,6 @@ interface AuthState {
   token: string
   email?: string
 }
-
-const WEBSITE_LOGIN_URL = "http://localhost:3001/login.html"
 
 const EMPTY_FORM: SaveForm = {
   prompt: "",
@@ -98,6 +101,7 @@ export default function Popup() {
   const [activeFilter, setActiveFilter] = useState("")
   const [loadingBrowse, setLoadingBrowse] = useState(false)
   const [browseError, setBrowseError] = useState("")
+  const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL)
 
   useEffect(() => {
     chrome.storage.local.get(["autoCheck", "auth"], (result) => {
@@ -110,6 +114,29 @@ export default function Popup() {
     }
     chrome.storage.onChanged.addListener(onStorageChange)
     return () => chrome.storage.onChanged.removeListener(onStorageChange)
+  }, [])
+
+  const refreshApiBaseUrl = async () => {
+    try {
+      const response = await sendToBackground<any, { success?: boolean; baseUrl?: string }>({
+        name: "index",
+        body: { type: "GET_API_BASE" }
+      })
+
+      if (response?.success && response.baseUrl) {
+        setApiBaseUrl(response.baseUrl)
+        return response.baseUrl
+      }
+    } catch {
+      setApiBaseUrl(DEFAULT_API_BASE_URL)
+      return DEFAULT_API_BASE_URL
+    }
+
+    return DEFAULT_API_BASE_URL
+  }
+
+  useEffect(() => {
+    void refreshApiBaseUrl()
   }, [])
 
   const fetchSnippets = async (query = "") => {
@@ -190,8 +217,9 @@ export default function Popup() {
     chrome.storage.local.remove("auth")
   }
 
-  const handleLogin = () => {
-    const loginUrl = `${WEBSITE_LOGIN_URL}?pc_extension_id=${encodeURIComponent(chrome.runtime.id)}`
+  const handleLogin = async () => {
+    const baseUrl = await refreshApiBaseUrl()
+    const loginUrl = `${buildLoginUrl(baseUrl)}?pc_extension_id=${encodeURIComponent(chrome.runtime.id)}`
     chrome.tabs.create({ url: loginUrl })
   }
 
@@ -273,7 +301,7 @@ export default function Popup() {
           </button>
         </div>
         <div className="popup-footer">
-          <a href="http://localhost:3001" target="_blank" rel="noreferrer">Open Dashboard →</a>
+          <a href={buildDashboardUrl(apiBaseUrl)} target="_blank" rel="noreferrer">Open Dashboard →</a>
         </div>
       </div>
     )
@@ -476,7 +504,7 @@ export default function Popup() {
       )}
 
       <div className="popup-footer">
-        <a href="http://localhost:3001" target="_blank" rel="noreferrer">Open Dashboard →</a>
+        <a href={buildDashboardUrl(apiBaseUrl)} target="_blank" rel="noreferrer">Open Dashboard →</a>
       </div>
     </div>
   )
