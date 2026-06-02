@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace LLMCache.Api.Controllers;
 
 [ApiController]
-[Route("[controller]")]
+[Route("api/[controller]")]
 [Produces("application/json")]
 public class DeltaController(IDeltaService deltaService, ILogger<DeltaController> logger) : ControllerBase
 {

@@ -7,7 +7,7 @@ namespace LLMCache.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("[controller]")]
+[Route("api/[controller]")]
 [Produces("application/json")]
 public class SnippetsController(ISnippetService snippetService, ILogger<SnippetsController> logger) : ControllerBase
 {

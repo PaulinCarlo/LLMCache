@@ -24,7 +24,7 @@
   },
   "manifest": {
     "host_permissions": [
-      "http://localhost:5001/*",
+      "http://localhost:3001/*",
       "https://chat.openai.com/*",
       "https://chatgpt.com/*",
       "https://claude.ai/*",
