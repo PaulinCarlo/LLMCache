@@ -60,16 +60,41 @@ const EMPTY_FORM: SaveForm = {
   strictMode: false
 }
 
+function describeExtensionError(error: unknown, fallback: string): string {
+  const raw = String(error || "").trim()
+  const lower = raw.toLowerCase()
+
+  if (!raw) return fallback
+  if (lower.includes("connection failed")) return "PromptCache API is not reachable. Start the backend and retry."
+  if (lower.includes("http 401")) return "Authentication expired. Sign in again from the popup."
+  if (lower.includes("http 403")) return "Access denied for this action."
+  if (lower.includes("http 404")) return "PromptCache endpoint not found."
+  if (lower.includes("http 5")) return "PromptCache backend error. Please retry."
+  if (lower.includes("not logged in")) return "Sign in from the popup before checking prompts."
+  if (lower.includes("no prompt found")) return "No prompt found on this page. Type a prompt first."
+  if (
+    lower.includes("receiving end does not exist") ||
+    lower.includes("could not establish connection")
+  ) {
+    return "Prompt check is unavailable on this page."
+  }
+
+  return `${fallback}: ${raw}`
+}
+
 export default function Popup() {
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [tab, setTab] = useState<"browse" | "save">("browse")
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<SaveForm>(EMPTY_FORM)
   const [saveMsg, setSaveMsg] = useState("")
+  const [saveMsgType, setSaveMsgType] = useState<"success" | "error">("success")
   const [searchQuery, setSearchQuery] = useState("")
   const [autoCheck, setAutoCheck] = useState(false)
   const [auth, setAuth] = useState<AuthState>({ token: "" })
   const [checking, setChecking] = useState(false)
+  const [checkMsg, setCheckMsg] = useState("")
+  const [checkMsgType, setCheckMsgType] = useState<"success" | "error">("success")
   const [activeFilter, setActiveFilter] = useState("")
   const [loadingBrowse, setLoadingBrowse] = useState(false)
   const [browseError, setBrowseError] = useState("")
@@ -102,14 +127,14 @@ export default function Popup() {
       })
 
       if (!resp?.success) {
-        setBrowseError(resp?.error || "Failed to load snippets")
+        setBrowseError(describeExtensionError(resp?.error, "Failed to load snippets"))
         setSnippets([])
         return
       }
 
       setSnippets(Array.isArray(resp.snippets) ? resp.snippets : [])
-    } catch {
-      setBrowseError("Backend not connected")
+    } catch (err) {
+      setBrowseError(describeExtensionError(err, "Failed to load snippets"))
       setSnippets([])
     } finally {
       setLoadingBrowse(false)
@@ -133,15 +158,31 @@ export default function Popup() {
 
   const handleCheckForPrompt = async () => {
     setChecking(true)
+    setCheckMsg("")
     try {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true })
-      if (activeTab?.id) {
-        await chrome.tabs.sendMessage(activeTab.id, { type: "CHECK_PROMPT" })
+      if (!activeTab?.id) {
+        setCheckMsgType("error")
+        setCheckMsg("No active tab found for prompt check.")
+      } else {
+        const response = await chrome.tabs.sendMessage(activeTab.id, { type: "CHECK_PROMPT" })
+        if (!response?.success) {
+          setCheckMsgType("error")
+          setCheckMsg(describeExtensionError(response?.error, "Prompt check failed"))
+        } else if (response.hit) {
+          setCheckMsgType("success")
+          setCheckMsg("Cache hit found. See overlay in the chat page.")
+        } else {
+          setCheckMsgType("success")
+          setCheckMsg("No cache match for the current prompt.")
+        }
       }
-    } catch {
-      // content script not available on this page
+    } catch (err) {
+      setCheckMsgType("error")
+      setCheckMsg(describeExtensionError(err, "Prompt check failed"))
     }
     setChecking(false)
+    setTimeout(() => setCheckMsg(""), 3500)
   }
 
   const handleLogout = () => {
@@ -191,6 +232,7 @@ export default function Popup() {
     setSaving(false)
 
     if (resp?.success) {
+      setSaveMsgType("success")
       setSaveMsg("✓ Snippet saved!")
       setForm(EMPTY_FORM)
       setTab("browse")
@@ -199,7 +241,8 @@ export default function Popup() {
       return
     }
 
-    setSaveMsg(`✗ Save failed${resp?.status ? ` (HTTP ${resp.status})` : ""}`)
+    setSaveMsgType("error")
+    setSaveMsg(`✗ ${describeExtensionError(resp?.error || (resp?.status ? `HTTP ${resp.status}` : ""), "Save failed")}`)
     setTimeout(() => setSaveMsg(""), 3000)
   }
 
@@ -267,6 +310,11 @@ export default function Popup() {
           {checking ? "…" : "Check ⚡"}
         </button>
       </div>
+      {checkMsg && (
+        <div className={`check-msg ${checkMsgType === "error" ? "error" : ""}`}>
+          {checkMsg}
+        </div>
+      )}
 
       <div className="popup-tabs">
         <button className={`tab ${tab === "browse" ? "active" : ""}`} onClick={() => setTab("browse")}>
@@ -423,7 +471,7 @@ export default function Popup() {
           <button className="save-btn" onClick={handleSave} disabled={saving || !form.prompt.trim() || !form.code.trim()}>
             {saving ? "Saving…" : "Save Snippet"}
           </button>
-          {saveMsg && <div className="save-msg">{saveMsg}</div>}
+          {saveMsg && <div className={`save-msg ${saveMsgType === "error" ? "error" : ""}`}>{saveMsg}</div>}
         </div>
       )}
 
