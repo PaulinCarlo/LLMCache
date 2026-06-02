@@ -12,7 +12,8 @@ export const config: PlasmoCSConfig = {
     "https://gemini.google.com/*",
     "https://bard.google.com/*",
     "https://www.bing.com/chat*",
-    "https://github.com/*"
+    "https://github.com/*",
+    "https://copilot.github.com/*"
   ],
   all_frames: false
 }

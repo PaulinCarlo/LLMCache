@@ -16,11 +16,13 @@ import { GithubAdapter } from "./github"
  */
 export function getAdapter(): ChatAdapter | null {
   const { hostname } = window.location
-  if (hostname === "chatgpt.com" || hostname === "chat.openai.com")
+  const host = hostname.toLowerCase()
+  if (host === "chatgpt.com" || host === "chat.openai.com")
     return new ChatGPTAdapter()
-  if (hostname === "claude.ai") return new ClaudeAdapter()
-  if (hostname === "gemini.google.com" || hostname === "bard.google.com")
+  if (host === "claude.ai") return new ClaudeAdapter()
+  if (host === "gemini.google.com" || host === "bard.google.com")
     return new GeminiAdapter()
-  if (hostname === "github.com") return new GithubAdapter()
+  if (host === "github.com" || host === "www.github.com" || host === "copilot.github.com")
+    return new GithubAdapter()
   return null
 }

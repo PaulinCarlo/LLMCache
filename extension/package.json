@@ -29,7 +29,9 @@
       "https://chatgpt.com/*",
       "https://claude.ai/*",
       "https://gemini.google.com/*",
-      "https://github.com/*"
+      "https://bard.google.com/*",
+      "https://github.com/*",
+      "https://copilot.github.com/*"
     ],
     "permissions": [
       "storage",

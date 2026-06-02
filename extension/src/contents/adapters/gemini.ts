@@ -2,19 +2,35 @@ import type { ChatAdapter } from "./types"
 
 // Gemini uses a Quill-based rich textarea inside a <rich-textarea> custom element
 const INPUT_SEL = [
+  'rich-textarea textarea',
   '.ql-editor[contenteditable="true"]',
   'rich-textarea div[contenteditable="true"]',
-  'div[contenteditable="true"][data-placeholder]'
+  'div[contenteditable="true"][data-placeholder]',
+  'div[aria-label*="Enter a prompt" i][contenteditable="true"]'
 ].join(", ")
 
 const SEND_SEL = [
+  'button[data-test-id*="send" i]',
   "button.send-button",
   'button[aria-label="Send message"]',
+  'button[aria-label="Send"]',
   'button[aria-label*="Send" i][mat-icon-button]',
-  'button[mattooltip*="Send" i]'
+  'button[mattooltip*="Send" i]',
+  'button[aria-label*="Submit" i]'
 ].join(", ")
 
-function setContentEditable(el: HTMLElement, text: string): void {
+function setInputText(el: HTMLElement, text: string): void {
+  if (el instanceof HTMLTextAreaElement) {
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value"
+    )?.set
+    setter?.call(el, text)
+    el.dispatchEvent(new Event("input", { bubbles: true }))
+    el.dispatchEvent(new Event("change", { bubbles: true }))
+    return
+  }
+
   el.focus()
   document.execCommand("selectAll", false)
   document.execCommand("insertText", false, text)
@@ -28,12 +44,15 @@ export class GeminiAdapter implements ChatAdapter {
   }
 
   getPromptText(): string {
-    return this.getInput()?.innerText ?? ""
+    const input = this.getInput()
+    if (!input) return ""
+    if (input instanceof HTMLTextAreaElement) return input.value ?? ""
+    return input.innerText ?? ""
   }
 
   setPromptText(text: string): void {
     const el = this.getInput()
-    if (el) setContentEditable(el, text)
+    if (el) setInputText(el, text)
   }
 
   interceptSend(handler: (prompt: string) => Promise<boolean>): () => void {
