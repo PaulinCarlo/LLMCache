@@ -63,6 +63,64 @@ const EMPTY_FORM: SaveForm = {
   strictMode: false
 }
 
+const PROMPT_CHECK_RETRY_DELAYS_MS = [0, 200, 500]
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isPromptCheckConnectionError(error: unknown): boolean {
+  const text = String(error || "").toLowerCase()
+  return (
+    text.includes("receiving end does not exist") ||
+    text.includes("could not establish connection")
+  )
+}
+
+function isSupportedPromptCheckUrl(url?: string): boolean {
+  if (!url) return false
+
+  try {
+    const { hostname, pathname } = new URL(url)
+    const host = hostname.toLowerCase()
+    const path = pathname.toLowerCase()
+
+    return (
+      host === "chatgpt.com" ||
+      host === "chat.openai.com" ||
+      host === "claude.ai" ||
+      host === "gemini.google.com" ||
+      host === "bard.google.com" ||
+      host === "copilot.github.com" ||
+      host === "github.com" ||
+      (host === "www.bing.com" && path.startsWith("/chat"))
+    )
+  } catch {
+    return false
+  }
+}
+
+async function sendPromptCheck(tabId: number): Promise<any> {
+  let lastError: unknown = null
+
+  for (const delayMs of PROMPT_CHECK_RETRY_DELAYS_MS) {
+    if (delayMs > 0) {
+      await wait(delayMs)
+    }
+
+    try {
+      return await chrome.tabs.sendMessage(tabId, { type: "CHECK_PROMPT" })
+    } catch (error) {
+      lastError = error
+      if (!isPromptCheckConnectionError(error)) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError ?? new Error("Prompt check is still loading on this page.")
+}
+
 function describeExtensionError(error: unknown, fallback: string): string {
   const raw = String(error || "").trim()
   const lower = raw.toLowerCase()
@@ -79,7 +137,7 @@ function describeExtensionError(error: unknown, fallback: string): string {
     lower.includes("receiving end does not exist") ||
     lower.includes("could not establish connection")
   ) {
-    return "Prompt check is unavailable on this page."
+    return "Prompt check is still loading on this page. Wait a moment and retry."
   }
 
   return `${fallback}: ${raw}`
@@ -191,8 +249,11 @@ export default function Popup() {
       if (!activeTab?.id) {
         setCheckMsgType("error")
         setCheckMsg("No active tab found for prompt check.")
+      } else if (!isSupportedPromptCheckUrl(activeTab.url)) {
+        setCheckMsgType("error")
+        setCheckMsg("Prompt check works only on supported AI chat pages.")
       } else {
-        const response = await chrome.tabs.sendMessage(activeTab.id, { type: "CHECK_PROMPT" })
+        const response = await sendPromptCheck(activeTab.id)
         if (!response?.success) {
           setCheckMsgType("error")
           setCheckMsg(describeExtensionError(response?.error, "Prompt check failed"))

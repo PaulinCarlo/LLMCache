@@ -5,6 +5,10 @@
   "description": "Semantic caching layer for LLM prompts in your browser",
   "private": true,
   "scripts": {
+    "sync:backend-config": "node scripts/sync-backend-config.mjs",
+    "predev": "npm run sync:backend-config",
+    "prebuild": "npm run sync:backend-config",
+    "prepackage": "npm run sync:backend-config",
     "dev": "plasmo dev",
     "build": "plasmo build",
     "package": "plasmo package"

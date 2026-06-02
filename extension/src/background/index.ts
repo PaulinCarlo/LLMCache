@@ -1,6 +1,7 @@
 import type { PlasmoMessaging } from "@plasmohq/messaging"
 import "../../../shared/backend-api.js"
 import {
+  DEFAULT_API_BASE_URL,
   readStoredApiBaseUrl,
   resolveApiBaseUrl,
   getCandidateApiBaseUrls,
@@ -45,7 +46,8 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 function createApiClient(baseUrl: string) {
   return (globalThis as any).PromptCacheApi.createClient({
     baseUrl,
-    getAuthHeaders
+    getAuthHeaders,
+    timeoutMs: 3500
   })
 }
 
@@ -55,17 +57,37 @@ function isConnectionError(error: unknown): boolean {
     text.includes("failed to fetch") ||
     text.includes("networkerror") ||
     text.includes("load failed") ||
-    text.includes("connection failed")
+    text.includes("connection failed") ||
+    text.includes("the user aborted a request") ||
+    text.includes("signal is aborted") ||
+    text.includes("network request failed")
   )
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error("Connection failed")), timeoutMs)
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timeoutId)
+        reject(error)
+      }
+    )
+  })
 }
 
 async function callApi<T>(request: (apiClient: any) => Promise<T>): Promise<T> {
   const preferredBaseUrl = await readStoredApiBaseUrl()
+  const resolvedBaseUrl = await resolveApiBaseUrl(preferredBaseUrl)
   let lastError: unknown = null
 
-  for (const baseUrl of getCandidateApiBaseUrls(preferredBaseUrl)) {
+  for (const baseUrl of getCandidateApiBaseUrls(resolvedBaseUrl)) {
     try {
-      const result = await request(createApiClient(baseUrl))
+      const result = await withTimeout(request(createApiClient(baseUrl)), 4500)
       await writeStoredApiBaseUrl(baseUrl)
       return result
     } catch (error) {
@@ -76,7 +98,7 @@ async function callApi<T>(request: (apiClient: any) => Promise<T>): Promise<T> {
     }
   }
 
-  throw lastError ?? new Error("Connection failed")
+  throw lastError ?? new Error(`Connection failed for ${resolvedBaseUrl || DEFAULT_API_BASE_URL}`)
 }
 
 export const handler: PlasmoMessaging.MessageHandler = async (req, res) => {
