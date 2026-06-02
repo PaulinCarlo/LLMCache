@@ -23,3 +23,4 @@ src/LLMCache.Api/bin/*
 *.log
 src/LLMCache.Api/LLMCache.Api.csproj.lscache
 src/LLMCache.Api.Tests/LLMCache.Api.Tests.csproj.lscache
+/src/.vs
